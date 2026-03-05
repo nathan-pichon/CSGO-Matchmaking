@@ -165,8 +165,7 @@ public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBr
     // Cancel any active queue entry on disconnect
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
+        "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
         steamID);
     g_hDB.Query(DB_GenericCallback, query, _, DBPrio_High);
 
@@ -257,8 +256,7 @@ public Action Cmd_Queue(int client, int args)
     // Step 1: Check ban status
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT is_banned, ban_until FROM mm_players "
-        "WHERE steam_id='%s' AND is_banned=1 AND ban_until > NOW() LIMIT 1",
+        "SELECT is_banned, ban_until FROM mm_players WHERE steam_id='%s' AND is_banned=1 AND ban_until > NOW() LIMIT 1",
         steamID);
     g_hDB.Query(DB_CheckBan, query, pack, DBPrio_High);
 
@@ -318,9 +316,7 @@ public void DB_CheckBan(Database db, DBResultSet results, const char[] error, Da
 
     char query[768];
     db.Format(query, sizeof(query),
-        "INSERT INTO mm_players (steam_id, steam_id64, name, elo, rank_tier) "
-        "VALUES ('%s', %s, '%s', 1000, 5) "
-        "ON DUPLICATE KEY UPDATE name='%s', last_queue=NOW()",
+        "INSERT INTO mm_players (steam_id, steam_id64, name, elo, rank_tier) VALUES ('%s', %s, '%s', 1000, 5) ON DUPLICATE KEY UPDATE name='%s', last_queue=NOW()",
         escapedSteamID, steam64Str, escapedName, escapedName);
     g_hDB.Query(DB_UpsertPlayer, query, pack2, DBPrio_High);
 }
@@ -405,15 +401,13 @@ public void DB_FetchElo(Database db, DBResultSet results, const char[] error, Da
         char escapedMap[65];
         db.Escape(mapPref, escapedMap, sizeof(escapedMap));
         g_hDB.Format(query, sizeof(query),
-            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) "
-            "VALUES ('%s', %d, %d, 'waiting', '%s')",
+            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) VALUES ('%s', %d, %d, 'waiting', '%s')",
             steamID, elo, rankTier, escapedMap);
     }
     else
     {
         g_hDB.Format(query, sizeof(query),
-            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) "
-            "VALUES ('%s', %d, %d, 'waiting')",
+            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) VALUES ('%s', %d, %d, 'waiting')",
             steamID, elo, rankTier);
     }
     g_hDB.Query(DB_QueueInserted, query, pack2, DBPrio_High);
@@ -465,9 +459,7 @@ public void DB_QueueCount(Database db, DBResultSet results, const char[] error, 
         MM_GetRankName(g_iRank[client], rankName, sizeof(rankName));
 
         MM_PrintToChat(client,
-            "\x04You joined the queue! \x01(\x09%d\x01 player(s) waiting) "
-            "| Rank: \x04%s\x01 | ELO: \x09%d\x01 "
-            "| Type \x04!leave\x01 to cancel.",
+            "\x04You joined the queue! \x01(\x09%d\x01 player(s) waiting) | Rank: \x04%s\x01 | ELO: \x09%d\x01 | Type \x04!leave\x01 to cancel.",
             count, rankName, g_iElo[client]);
     }
 }
@@ -498,8 +490,7 @@ public Action Cmd_Leave(int client, int args)
 
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
+        "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
         steamID);
     g_hDB.Query(DB_GenericCallback, query, _, DBPrio_High);
 
@@ -532,8 +523,7 @@ public Action Cmd_Status(int client, int args)
     }
 
     MM_PrintToChat(client,
-        "You are in the queue (\x04waiting\x01). "
-        "ELO: \x09%d\x01 | Type \x04!leave\x01 to cancel.",
+        "You are in the queue (\x04waiting\x01). ELO: \x09%d\x01 | Type \x04!leave\x01 to cancel.",
         g_iElo[client]);
 
     if (g_hDB == null)
@@ -580,9 +570,7 @@ public Action Cmd_Rank(int client, int args)
 
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT elo, rank_tier, matches_played, matches_won, matches_lost, "
-        "       total_kills, total_deaths "
-        "FROM mm_players WHERE steam_id='%s' LIMIT 1",
+        "SELECT elo, rank_tier, matches_played, matches_won, matches_lost, total_kills, total_deaths FROM mm_players WHERE steam_id='%s' LIMIT 1",
         steamID);
     g_hDB.Query(DB_RankCallback, query, GetClientUserId(client), DBPrio_Normal);
 
@@ -645,9 +633,7 @@ public Action Cmd_Top(int client, int args)
     }
 
     g_hDB.Query(DB_TopCallback,
-        "SELECT name, elo, rank_tier, matches_played "
-        "FROM mm_players WHERE matches_played >= 1 "
-        "ORDER BY elo DESC LIMIT 10",
+        "SELECT name, elo, rank_tier, matches_played FROM mm_players WHERE matches_played >= 1 ORDER BY elo DESC LIMIT 10",
         GetClientUserId(client), DBPrio_Normal);
 
     return Plugin_Handled;
@@ -718,10 +704,7 @@ public Action Cmd_Stats(int client, int args)
 
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT elo, rank_tier, matches_played, matches_won, matches_lost, matches_tied, "
-        "       total_kills, total_deaths, total_assists, total_headshots, "
-        "       win_streak, best_streak "
-        "FROM mm_players WHERE steam_id='%s' LIMIT 1",
+        "SELECT elo, rank_tier, matches_played, matches_won, matches_lost, matches_tied, total_kills, total_deaths, total_assists, total_headshots, win_streak, best_streak FROM mm_players WHERE steam_id='%s' LIMIT 1",
         steamID);
     g_hDB.Query(DB_StatsCallback, query, GetClientUserId(client), DBPrio_Normal);
 
@@ -798,9 +781,7 @@ public Action Timer_PollMatchAssignment(Handle timer)
 
         char query[512];
         g_hDB.Format(query, sizeof(query),
-            "SELECT status, match_id FROM mm_queue "
-            "WHERE steam_id='%s' AND status IN ('waiting','ready_check','matched') "
-            "ORDER BY id DESC LIMIT 1",
+            "SELECT status, match_id FROM mm_queue WHERE steam_id='%s' AND status IN ('waiting','ready_check','matched') ORDER BY id DESC LIMIT 1",
             steamID);
         g_hDB.Query(DB_PollResult, query, GetClientUserId(client), DBPrio_High);
     }
@@ -861,9 +842,7 @@ public void DB_PollResult(Database db, DBResultSet results, const char[] error, 
 
         char query[512];
         g_hDB.Format(query, sizeof(query),
-            "SELECT m.server_ip, m.server_port, m.server_password "
-            "FROM mm_matches m "
-            "WHERE m.id=%d AND m.status IN ('creating','warmup','live') LIMIT 1",
+            "SELECT m.server_ip, m.server_port, m.server_password FROM mm_matches m WHERE m.id=%d AND m.status IN ('creating','warmup','live') LIMIT 1",
             matchId);
         g_hDB.Query(DB_FetchMatchServer, query, pack, DBPrio_High);
     }
@@ -1102,8 +1081,7 @@ void ReadyCheck_Decline(int client)
     ResetClientState(client);
 
     MM_WarnToChat(client,
-        "\x07You declined the ready check.\x01 "
-        "You are banned from matchmaking for \x09%d\x01 minute(s).",
+        "\x07You declined the ready check.\x01 You are banned from matchmaking for \x09%d\x01 minute(s).",
         DECLINE_BAN_MINUTES);
 }
 
@@ -1170,8 +1148,7 @@ public Action Timer_AntiAFK(Handle timer)
 
                 char query[512];
                 g_hDB.Format(query, sizeof(query),
-                    "UPDATE mm_queue SET status='cancelled' "
-                    "WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
+                    "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
                     steamID);
                 g_hDB.Query(DB_GenericCallback, query, _, DBPrio_Normal);
             }

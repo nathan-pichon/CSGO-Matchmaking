@@ -17,6 +17,9 @@ on:
       - "match-server/sourcemod/scripting/**.sp"
   workflow_dispatch: # Allow manual trigger
 
+permissions:
+  contents: write  # Required to commit compiled .smx files back to the repo
+
 jobs:
   compile:
     name: Compile SourcePawn plugins

@@ -201,8 +201,7 @@ public void DB_ForceStartDone(Database db, DBResultSet results, const char[] err
     if (client > 0 && MM_IsValidClient(client))
     {
         ReplyToCommand(client,
-            "[MM] Force-start: promoted %d queue entries to ready_check. "
-            "Matchmaker will proceed.",
+            "[MM] Force-start: promoted %d queue entries to ready_check. Matchmaker will proceed.",
             affected);
     }
     else
@@ -217,8 +216,7 @@ public void DB_ForceStartDone(Database db, DBResultSet results, const char[] err
         if (GetUserFlagBits(i) & ADMFLAG_ROOT)
         {
             PrintToChat(i,
-                " \x02[MM-Admin]\x01 Force-start triggered. "
-                "\x09%d\x01 queue entries set to ready_check.",
+                " \x02[MM-Admin]\x01 Force-start triggered. \x09%d\x01 queue entries set to ready_check.",
                 affected);
         }
     }
@@ -369,11 +367,7 @@ public Action Cmd_Ban(int client, int args)
     // Insert ban record
     char banQuery[768];
     g_hDB.Format(banQuery, sizeof(banQuery),
-        "INSERT INTO mm_bans (steam_id, reason, expires_at, banned_by, is_active) "
-        "VALUES ('%s', '%s', DATE_ADD(NOW(), INTERVAL %d MINUTE), '%s', 1) "
-        "ON DUPLICATE KEY UPDATE "
-        "  reason='%s', expires_at=DATE_ADD(NOW(), INTERVAL %d MINUTE), "
-        "  banned_by='%s', is_active=1",
+        "INSERT INTO mm_bans (steam_id, reason, expires_at, banned_by, is_active) VALUES ('%s', '%s', DATE_ADD(NOW(), INTERVAL %d MINUTE), '%s', 1) ON DUPLICATE KEY UPDATE reason='%s', expires_at=DATE_ADD(NOW(), INTERVAL %d MINUTE), banned_by='%s', is_active=1",
         escapedTarget, escapedReason, minutes, escapedAdmin,
         escapedReason, minutes, escapedAdmin);
 
@@ -388,16 +382,14 @@ public Action Cmd_Ban(int client, int args)
     // Also update mm_players.is_banned / ban_until
     char playerBanQuery[512];
     g_hDB.Format(playerBanQuery, sizeof(playerBanQuery),
-        "UPDATE mm_players SET is_banned=1, ban_until=DATE_ADD(NOW(), INTERVAL %d MINUTE) "
-        "WHERE steam_id='%s'",
+        "UPDATE mm_players SET is_banned=1, ban_until=DATE_ADD(NOW(), INTERVAL %d MINUTE) WHERE steam_id='%s'",
         minutes, escapedTarget);
     g_hDB.Query(DB_GenericCallback, playerBanQuery, _, DBPrio_High);
 
     // Cancel any active queue entry for the banned player
     char cancelQuery[512];
     g_hDB.Format(cancelQuery, sizeof(cancelQuery),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
+        "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
         escapedTarget);
     g_hDB.Query(DB_GenericCallback, cancelQuery, _, DBPrio_High);
 
@@ -446,8 +438,7 @@ public void DB_BanInserted(Database db, DBResultSet results, const char[] error,
     if (MM_IsValidClient(target))
     {
         PrintToChat(target,
-            " \x07[MM]\x01 You have been \x07banned\x01 from matchmaking for "
-            "\x09%d\x01 minute(s). Reason: %s",
+            " \x07[MM]\x01 You have been \x07banned\x01 from matchmaking for \x09%d\x01 minute(s). Reason: %s",
             minutes, reason);
     }
 }
@@ -552,8 +543,7 @@ public void DB_UnbanDone(Database db, DBResultSet results, const char[] error, D
         if (StrEqual(clientSteam, steamID))
         {
             PrintToChat(i,
-                " \x04[MM]\x01 Your matchmaking ban has been \x04removed\x01. "
-                "You may now type \x04!queue\x01.");
+                " \x04[MM]\x01 Your matchmaking ban has been \x04removed\x01. You may now type \x04!queue\x01.");
             break;
         }
     }
@@ -629,8 +619,7 @@ public Action Cmd_SetElo(int client, int args)
     // Also log to elo_history
     char histQuery[512];
     g_hDB.Format(histQuery, sizeof(histQuery),
-        "INSERT INTO mm_elo_history (steam_id, elo_before, elo_after, change_reason) "
-        "SELECT '%s', elo, %d, 'admin' FROM mm_players WHERE steam_id='%s'",
+        "INSERT INTO mm_elo_history (steam_id, elo_before, elo_after, change_reason) SELECT '%s', elo, %d, 'admin' FROM mm_players WHERE steam_id='%s'",
         escaped, newElo, escaped);
     g_hDB.Query(DB_GenericCallback, histQuery, _, DBPrio_Low);
 
@@ -737,8 +726,7 @@ public Action Cmd_ResetRank(int client, int args)
     // Log to elo_history
     char histQuery[512];
     g_hDB.Format(histQuery, sizeof(histQuery),
-        "INSERT INTO mm_elo_history (steam_id, elo_before, elo_after, change_reason) "
-        "SELECT '%s', elo, 1000, 'admin' FROM mm_players WHERE steam_id='%s'",
+        "INSERT INTO mm_elo_history (steam_id, elo_before, elo_after, change_reason) SELECT '%s', elo, 1000, 'admin' FROM mm_players WHERE steam_id='%s'",
         escaped, escaped);
     g_hDB.Query(DB_GenericCallback, histQuery, _, DBPrio_Low);
 
@@ -778,8 +766,7 @@ public void DB_ResetRankDone(Database db, DBResultSet results, const char[] erro
     if (MM_IsValidClient(target))
     {
         PrintToChat(target,
-            " \x09[MM-Admin]\x01 An admin reset your rank to "
-            "\x04Silver Elite Master\x01 (1000 ELO).");
+            " \x09[MM-Admin]\x01 An admin reset your rank to \x04Silver Elite Master\x01 (1000 ELO).");
     }
 }
 
@@ -800,15 +787,12 @@ public Action Cmd_Status(int client, int args)
 
     // Query 1: queue depths
     g_hDB.Query(DB_StatusQueueResult,
-        "SELECT status, COUNT(*) as cnt FROM mm_queue "
-        "GROUP BY status",
+        "SELECT status, COUNT(*) as cnt FROM mm_queue GROUP BY status",
         GetClientUserId(client), DBPrio_High);
 
     // Query 2: active matches
     g_hDB.Query(DB_StatusMatchesResult,
-        "SELECT id, map_name, status, server_ip, server_port, started_at "
-        "FROM mm_matches WHERE status IN ('creating','warmup','live','overtime') "
-        "ORDER BY started_at DESC LIMIT 20",
+        "SELECT id, map_name, status, server_ip, server_port, started_at FROM mm_matches WHERE status IN ('creating','warmup','live','overtime') ORDER BY started_at DESC LIMIT 20",
         GetClientUserId(client), DBPrio_High);
 
     return Plugin_Handled;

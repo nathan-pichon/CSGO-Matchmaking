@@ -126,8 +126,7 @@ public Action Timer_WelcomeClient(Handle timer, any userid)
     PrintToChat(client,
         " \x02[MM]\x01 Type \x04!queue\x01 to join the matchmaking queue.");
     PrintToChat(client,
-        " \x02[MM]\x01 Commands: \x04!queue\x01 | \x04!leave\x01 | "
-        "\x04!rank\x01 | \x04!stats\x01 | \x04!top\x01");
+        " \x02[MM]\x01 Commands: \x04!queue\x01 | \x04!leave\x01 | \x04!rank\x01 | \x04!stats\x01 | \x04!top\x01");
 
     // If the DB is up, also tell the player how many people are currently queued
     if (g_hDB != null && g_iCachedQueueCount > 0)
@@ -174,8 +173,7 @@ public void DB_AnnounceQueueResult(Database db, DBResultSet results, const char[
     {
         // Colour-coded broadcast: [MM] in green, count in orange, instruction in light green
         PrintToChatAll(
-            " \x02[MM]\x01 \x09%d\x01 player(s) in queue. "
-            "Type \x04!queue\x01 to join competitive matchmaking!",
+            " \x02[MM]\x01 \x09%d\x01 player(s) in queue. Type \x04!queue\x01 to join competitive matchmaking!",
             count);
     }
 }
@@ -224,8 +222,7 @@ public Action Timer_AnnounceTop3(Handle timer)
         return Plugin_Continue;
 
     g_hDB.Query(DB_Top3Result,
-        "SELECT name, elo, rank_tier FROM mm_players "
-        "WHERE matches_played >= 1 ORDER BY elo DESC LIMIT 3",
+        "SELECT name, elo, rank_tier FROM mm_players WHERE matches_played >= 1 ORDER BY elo DESC LIMIT 3",
         0, DBPrio_Low);
 
     return Plugin_Continue;

@@ -318,8 +318,7 @@ public Action Event_PlayerConnectFull(Event event, const char[] name, bool dontB
     {
         char query[512];
         Format(query, sizeof(query),
-            "UPDATE mm_match_players SET connected=1, connected_at=NOW() "
-            "WHERE match_id=%d AND steam_id='%s'",
+            "UPDATE mm_match_players SET connected=1, connected_at=NOW() WHERE match_id=%d AND steam_id='%s'",
             g_iMatchId, g_sSteamId[client]);
         g_hDB.Query(CB_GenericQuery, query);
     }
@@ -343,8 +342,7 @@ public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBr
     {
         char query[512];
         Format(query, sizeof(query),
-            "UPDATE mm_match_players SET abandoned=1 "
-            "WHERE match_id=%d AND steam_id='%s'",
+            "UPDATE mm_match_players SET abandoned=1 WHERE match_id=%d AND steam_id='%s'",
             g_iMatchId, g_sSteamId[client]);
         g_hDB.Query(CB_GenericQuery, query);
 
@@ -470,9 +468,7 @@ public Action Timer_WarmupTimeout(Handle timer)
     {
         char query[512];
         Format(query, sizeof(query),
-            "UPDATE mm_matches SET status='cancelled', "
-            "cancel_reason='Warmup timeout - not all players connected' "
-            "WHERE id=%d",
+            "UPDATE mm_matches SET status='cancelled', cancel_reason='Warmup timeout - not all players connected' WHERE id=%d",
             g_iMatchId);
         g_hDB.Query(CB_GenericQuery, query);
     }
@@ -664,8 +660,7 @@ public Action Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
         // Update match record
         char query[512];
         Format(query, sizeof(query),
-            "UPDATE mm_matches SET status='finished', team1_score=%d, team2_score=%d, "
-            "winner='%s', ended_at=NOW() WHERE id=%d",
+            "UPDATE mm_matches SET status='finished', team1_score=%d, team2_score=%d, winner='%s', ended_at=NOW() WHERE id=%d",
             team1Score, team2Score, winner, g_iMatchId);
         g_hDB.Query(CB_GenericQuery, query);
 
@@ -760,10 +755,7 @@ void SaveAllPlayerStats()
 
         char query[768];
         Format(query, sizeof(query),
-            "UPDATE mm_match_players "
-            "SET kills=%d, deaths=%d, assists=%d, headshots=%d, "
-            "    mvps=%d, score=%d, damage=%d "
-            "WHERE match_id=%d AND steam_id='%s'",
+            "UPDATE mm_match_players SET kills=%d, deaths=%d, assists=%d, headshots=%d, mvps=%d, score=%d, damage=%d WHERE match_id=%d AND steam_id='%s'",
             g_iKills[i], g_iDeaths[i], g_iAssists[i], g_iHeadshots[i],
             g_iMVPs[i], g_iScore[i], g_iDamage[i],
             g_iMatchId, escapedSID);
