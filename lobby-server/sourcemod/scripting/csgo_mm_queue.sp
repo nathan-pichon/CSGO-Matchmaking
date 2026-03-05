@@ -1064,17 +1064,14 @@ void ReadyCheck_Decline(int client)
     // Apply a short matchmaking ban for declining
     char banQuery[512];
     g_hDB.Format(banQuery, sizeof(banQuery),
-        "INSERT INTO mm_bans (steam_id, reason, expires_at, banned_by) "
-        "VALUES ('%s', 'Declined ready check', DATE_ADD(NOW(), INTERVAL %d MINUTE), 'system') "
-        "ON DUPLICATE KEY UPDATE reason=VALUES(reason), expires_at=VALUES(expires_at), is_active=1",
+        "INSERT INTO mm_bans (steam_id, reason, expires_at, banned_by) VALUES ('%s', 'Declined ready check', DATE_ADD(NOW(), INTERVAL %d MINUTE), 'system') ON DUPLICATE KEY UPDATE reason=VALUES(reason), expires_at=VALUES(expires_at), is_active=1",
         steamID, DECLINE_BAN_MINUTES);
     g_hDB.Query(DB_GenericCallback, banQuery, _, DBPrio_High);
 
     // Also update mm_players.is_banned so the ban-check query picks it up immediately
     char playerBanQuery[512];
     g_hDB.Format(playerBanQuery, sizeof(playerBanQuery),
-        "UPDATE mm_players SET is_banned=1, ban_until=DATE_ADD(NOW(), INTERVAL %d MINUTE) "
-        "WHERE steam_id='%s'",
+        "UPDATE mm_players SET is_banned=1, ban_until=DATE_ADD(NOW(), INTERVAL %d MINUTE) WHERE steam_id='%s'",
         DECLINE_BAN_MINUTES, steamID);
     g_hDB.Query(DB_GenericCallback, playerBanQuery, _, DBPrio_High);
 
@@ -1097,9 +1094,7 @@ public Action Timer_ExpireStaleQueue(Handle timer)
     // Expire entries that have been waiting longer than QUEUE_EXPIRE_MINUTES
     char query[256];
     Format(query, sizeof(query),
-        "UPDATE mm_queue SET status='expired' "
-        "WHERE status='waiting' "
-        "AND queued_at < DATE_SUB(NOW(), INTERVAL %d MINUTE)",
+        "UPDATE mm_queue SET status='expired' WHERE status='waiting' AND queued_at < DATE_SUB(NOW(), INTERVAL %d MINUTE)",
         QUEUE_EXPIRE_MINUTES);
     g_hDB.Query(DB_GenericCallback, query, _, DBPrio_Low);
 
