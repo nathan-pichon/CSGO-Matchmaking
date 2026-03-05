@@ -1,0 +1,132 @@
+name: Compile SourcePawn Plugins
+
+# Compiles all .sp plugins to .smx on every push to main or PR.
+# The compiled .smx files are committed back to the repo so install.sh
+# can simply copy them without needing a local spcomp binary.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lobby-server/sourcemod/scripting/**.sp"
+      - "match-server/sourcemod/scripting/**.sp"
+      - ".github/workflows/compile-plugins.yml"
+  pull_request:
+    paths:
+      - "lobby-server/sourcemod/scripting/**.sp"
+      - "match-server/sourcemod/scripting/**.sp"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  compile:
+    name: Compile SourcePawn plugins
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download SourceMod (Linux, stable 1.11)
+        run: |
+          SM_VERSION="1.11"
+          SM_URL=$(curl -s "https://www.sourcemod.net/downloads.php?branch=stable" \
+            | grep -oP 'https://sm\.alliedmods\.net/smdrop/[^"]+linux\.tar\.gz' \
+            | head -1)
+
+          # Fallback to a known stable build
+          if [[ -z "$SM_URL" ]]; then
+            SM_URL="https://sm.alliedmods.net/smdrop/1.11/sourcemod-1.11.0-git7152-linux.tar.gz"
+          fi
+
+          echo "Downloading SourceMod from: $SM_URL"
+          curl -L "$SM_URL" -o sourcemod.tar.gz
+          mkdir -p sourcemod
+          tar xzf sourcemod.tar.gz -C sourcemod
+
+      - name: Create output directories
+        run: |
+          mkdir -p lobby-server/sourcemod/plugins
+          mkdir -p match-server/sourcemod/plugins
+
+      - name: Compile lobby-server plugins
+        run: |
+          SPCOMP="./sourcemod/addons/sourcemod/scripting/spcomp"
+          chmod +x "$SPCOMP"
+          INCLUDES="./lobby-server/sourcemod/scripting/include"
+          SM_INCLUDES="./sourcemod/addons/sourcemod/scripting/include"
+
+          ERRORS=0
+          for SP in lobby-server/sourcemod/scripting/*.sp; do
+            PLUGIN="$(basename "${SP%.sp}")"
+            SMX="lobby-server/sourcemod/plugins/${PLUGIN}.smx"
+            echo "Compiling: $SP → $SMX"
+            if "$SPCOMP" "$SP" \
+                -i "$INCLUDES" \
+                -i "$SM_INCLUDES" \
+                -o "$SMX" \
+                2>&1; then
+              echo "  ✓ $PLUGIN"
+            else
+              echo "  ✗ $PLUGIN FAILED"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          if [[ $ERRORS -gt 0 ]]; then
+            echo "::error::$ERRORS plugin(s) failed to compile"
+            exit 1
+          fi
+
+      - name: Compile match-server plugins
+        run: |
+          SPCOMP="./sourcemod/addons/sourcemod/scripting/spcomp"
+          INCLUDES="./match-server/sourcemod/scripting/include"
+          SM_INCLUDES="./sourcemod/addons/sourcemod/scripting/include"
+
+          ERRORS=0
+          for SP in match-server/sourcemod/scripting/*.sp; do
+            PLUGIN="$(basename "${SP%.sp}")"
+            SMX="match-server/sourcemod/plugins/${PLUGIN}.smx"
+            echo "Compiling: $SP → $SMX"
+            if "$SPCOMP" "$SP" \
+                -i "$INCLUDES" \
+                -i "$SM_INCLUDES" \
+                -o "$SMX" \
+                2>&1; then
+              echo "  ✓ $PLUGIN"
+            else
+              echo "  ✗ $PLUGIN FAILED"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          if [[ $ERRORS -gt 0 ]]; then
+            echo "::error::$ERRORS plugin(s) failed to compile"
+            exit 1
+          fi
+
+      - name: List compiled plugins
+        run: |
+          echo "=== Lobby plugins ==="
+          ls -lh lobby-server/sourcemod/plugins/*.smx 2>/dev/null || echo "(none)"
+          echo ""
+          echo "=== Match server plugins ==="
+          ls -lh match-server/sourcemod/plugins/*.smx 2>/dev/null || echo "(none)"
+
+      - name: Commit compiled plugins back to repo
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add lobby-server/sourcemod/plugins/*.smx || true
+          git add match-server/sourcemod/plugins/*.smx || true
+
+          if git diff --cached --quiet; then
+            echo "No plugin changes to commit."
+          else
+            git commit -m "chore(plugins): auto-compile SourcePawn plugins [skip ci]"
+            git push
+          fi
