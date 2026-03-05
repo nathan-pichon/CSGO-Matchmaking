@@ -1,0 +1,46 @@
+"Databases"
+{
+    // ──────────────────────────────────────────────────────────────────────
+    // CS:GO Matchmaking database
+    // Used by: csgo_mm_queue.sp, csgo_mm_notify.sp, csgo_mm_admin.sp
+    //
+    // Copy this file to addons/sourcemod/configs/databases.cfg and fill in
+    // YOUR_DB_HOST and YOUR_DB_PASS with real values.
+    // ──────────────────────────────────────────────────────────────────────
+
+    "csgo_matchmaking"
+    {
+        "driver"    "mysql"
+        "host"      "YOUR_DB_HOST"
+        "database"  "csgo_matchmaking"
+        "user"      "csgo_mm"
+        "pass"      "YOUR_DB_PASS"
+        "port"      "3306"
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Levels Ranks plugin database entry (points at the same schema).
+    // Required if you run the lvl_base / Levels Ranks SourceMod plugin.
+    // Our matchmaking tables are prefixed mm_ so there is no collision.
+    // ──────────────────────────────────────────────────────────────────────
+
+    "levels_ranks"
+    {
+        "driver"    "mysql"
+        "host"      "YOUR_DB_HOST"
+        "database"  "csgo_matchmaking"
+        "user"      "csgo_mm"
+        "pass"      "YOUR_DB_PASS"
+        "port"      "3306"
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Default SourceMod SQLite database (keep for other plugins that use it)
+    // ──────────────────────────────────────────────────────────────────────
+
+    "default"
+    {
+        "driver"    "sqlite"
+        "database"  "sourcemod-local"
+    }
+}

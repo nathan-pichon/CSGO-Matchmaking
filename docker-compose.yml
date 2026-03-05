@@ -1,0 +1,135 @@
+version: "3.8"
+
+# ============================================================
+# CS:GO Matchmaking System - Docker Compose
+# ============================================================
+# This compose file manages support services (MySQL, web panel).
+# The CS:GO match servers are NOT managed here — they are
+# created on-demand by the Python matchmaker daemon via Docker API.
+#
+# Usage:
+#   docker compose up -d           # Start all services
+#   docker compose logs -f         # Follow logs
+#   docker compose down            # Stop all services
+#   docker compose down -v         # Stop + remove volumes (DESTROYS DATA)
+# ============================================================
+
+services:
+
+  # ── MySQL Database ──────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: csgo-mm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-changeme_root}
+      MYSQL_DATABASE: ${DB_NAME:-csgo_matchmaking}
+      MYSQL_USER: ${DB_USER:-csgo_mm}
+      MYSQL_PASSWORD: ${DB_PASS:-changeme}
+    ports:
+      # Bind to localhost only for security
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=256M
+      --max-connections=200
+      --slow-query-log=1
+      --slow-query-log-file=/var/log/mysql/slow.log
+      --long-query-time=2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${DB_USER:-csgo_mm}", "-p${DB_PASS:-changeme}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - csgo-mm
+
+  # ── Python Matchmaker Daemon ────────────────────────────
+  matchmaker:
+    build:
+      context: ./matchmaker
+      dockerfile: Dockerfile.matchmaker
+    container_name: csgo-mm-matchmaker
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-csgo_mm}
+      - DB_PASS=${DB_PASS:-changeme}
+      - DB_NAME=${DB_NAME:-csgo_matchmaking}
+      - SERVER_IP=${SERVER_IP:-}
+      - LOBBY_IP=${LOBBY_IP:-}
+      - LOBBY_PORT=${LOBBY_PORT:-27015}
+      - RCON_PASSWORD=${RCON_PASSWORD:-}
+      - DOCKER_IMAGE=${DOCKER_IMAGE:-csgo-match-server:latest}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - POLL_INTERVAL=${POLL_INTERVAL:-2.0}
+      - PLAYERS_PER_TEAM=${PLAYERS_PER_TEAM:-5}
+      - MAX_ELO_SPREAD=${MAX_ELO_SPREAD:-200}
+      - QUEUE_BACKEND=${QUEUE_BACKEND:-mysql}
+      - SERVER_BACKEND=${SERVER_BACKEND:-docker}
+      - NOTIFICATION_BACKEND=${NOTIFICATION_BACKEND:-discord}
+      - RANKING_BACKEND=${RANKING_BACKEND:-elo}
+    volumes:
+      # Mount Docker socket so matchmaker can control Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.env:/app/config.env:ro
+    networks:
+      - csgo-mm
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Flask Web Panel ─────────────────────────────────────
+  webpanel:
+    build:
+      context: ./web-panel
+      dockerfile: Dockerfile.webpanel
+    container_name: csgo-mm-webpanel
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-csgo_mm}
+      - DB_PASS=${DB_PASS:-changeme}
+      - DB_NAME=${DB_NAME:-csgo_matchmaking}
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=5000
+      - SECRET_KEY=${SECRET_KEY:-changeme_secret}
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+    volumes:
+      - ./config.env:/app/config.env:ro
+    networks:
+      - csgo-mm
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# ── Named Volumes ───────────────────────────────────────────
+volumes:
+  mysql_data:
+    name: csgo-mm-mysql-data
+    driver: local
+
+# ── Networks ────────────────────────────────────────────────
+networks:
+  csgo-mm:
+    name: csgo-mm-network
+    driver: bridge

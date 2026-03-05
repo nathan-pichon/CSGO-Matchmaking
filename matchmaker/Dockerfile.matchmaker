@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+LABEL description="CS:GO Matchmaking Daemon"
+
+WORKDIR /app
+
+# Install system dependencies (for mysql-connector-python native extension)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies first (layer cache)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY . .
+
+# Non-root user for security
+RUN useradd -m -u 1001 matchmaker
+USER matchmaker
+
+CMD ["python", "matchmaker.py"]

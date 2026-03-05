@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}CS:GO Matchmaking — Home{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     HERO
+================================================================ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">COMPETITIVE MATCHMAKING</div>
+    <h1 class="hero-title">CS:GO Competitive<br>Matchmaking</h1>
+    <p class="hero-subtitle">
+      Community-run competitive matchmaking for Legacy CS:GO.<br>
+      Skill-based, ELO-ranked, fair matches.
+    </p>
+    <a href="{{ url_for('leaderboard_bp.leaderboard') }}" class="btn btn-accent">View Leaderboard</a>
+    <a href="{{ url_for('matches_bp.match_list') }}" class="btn btn-outline">Recent Matches</a>
+  </div>
+</section>
+
+<!-- ================================================================
+     STAT CARDS
+================================================================ -->
+<section class="section">
+  <div class="container">
+    <div class="stat-grid stat-grid-3">
+
+      <div class="stat-card">
+        <div class="stat-card-icon">&#128100;</div>
+        <div class="stat-card-value">{{ total_players | default('—') }}</div>
+        <div class="stat-card-label">Registered Players</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-icon">&#127939;</div>
+        <div class="stat-card-value">{{ total_matches | default('—') }}</div>
+        <div class="stat-card-label">Matches Played</div>
+      </div>
+
+      <div class="stat-card stat-card-live">
+        <div class="stat-card-icon">
+          <span class="queue-dot queue-dot-lg"></span>
+        </div>
+        <div class="stat-card-value">{{ queue_count }}</div>
+        <div class="stat-card-label">Players in Queue</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     HOW TO CONNECT
+================================================================ -->
+<section class="section section-alt">
+  <div class="container">
+    <h2 class="section-title">How to Join</h2>
+    <div class="join-steps">
+
+      <div class="join-step">
+        <div class="step-number">01</div>
+        <div class="step-content">
+          <h3 class="step-title">Install Legacy CS:GO</h3>
+          <p class="step-desc">
+            Use the legacy branch of CS:GO (before the CS2 update) or a
+            compatible client. Make sure VAC is enabled and your game is
+            up to date.
+          </p>
+        </div>
+      </div>
+
+      <div class="join-step">
+        <div class="step-number">02</div>
+        <div class="step-content">
+          <h3 class="step-title">Connect to the Bot</h3>
+          <p class="step-desc">
+            Add our matchmaking bot on Steam and send <code>!queue</code>
+            to join the matchmaking queue. The bot will notify you when a
+            match is found.
+          </p>
+        </div>
+      </div>
+
+      <div class="join-step">
+        <div class="step-number">03</div>
+        <div class="step-content">
+          <h3 class="step-title">Accept &amp; Play</h3>
+          <p class="step-desc">
+            Once all players accept the match, connect to the provided
+            server IP. Play competitively and earn ELO based on your
+            result and performance.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+{% endblock %}

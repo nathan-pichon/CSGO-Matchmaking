@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Match History — CS:GO MM{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+
+    <div class="page-header">
+      <h1 class="page-title">Match History</h1>
+      <p class="page-subtitle">{{ total }} finished matches</p>
+    </div>
+
+    <!-- Match cards -->
+    <div class="match-list">
+      {% for m in matches %}
+      <a href="{{ url_for('matches_bp.match_detail', match_id=m.id) }}" class="match-card-link">
+        <div class="match-card">
+
+          <!-- Map colour block -->
+          <div class="match-map-block map-{{ m.map_name | lower | replace('de_', '') | replace(' ', '_') }}">
+            <span class="match-map-name">{{ m.map_name | e }}</span>
+          </div>
+
+          <!-- Score -->
+          <div class="match-score-block">
+            <span class="match-score-t1 {% if m.winner == 1 %}score-winner{% elif m.winner == 2 %}score-loser{% endif %}">
+              {{ m.team1_score }}
+            </span>
+            <span class="match-score-sep">—</span>
+            <span class="match-score-t2 {% if m.winner == 2 %}score-winner{% elif m.winner == 1 %}score-loser{% endif %}">
+              {{ m.team2_score }}
+            </span>
+          </div>
+
+          <!-- Meta info -->
+          <div class="match-meta">
+            <div class="match-date">
+              {{ m.ended_at.strftime('%d %b %Y  %H:%M') if m.ended_at else '—' }}
+            </div>
+            {% if m.duration_minutes %}
+            <div class="match-duration text-muted">
+              &#128336; {{ m.duration_minutes }} min
+            </div>
+            {% endif %}
+            <div class="match-winner-label">
+              {% if m.winner == 1 %}
+                <span class="result-badge result-win">Team 1 Win</span>
+              {% elif m.winner == 2 %}
+                <span class="result-badge result-win">Team 2 Win</span>
+              {% else %}
+                <span class="result-badge result-tie">Draw</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="match-arrow">&#8250;</div>
+        </div>
+      </a>
+      {% else %}
+      <div class="empty-state card">
+        <p>No matches found.</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Match history pages">
+      {% if page > 1 %}
+        <a href="?page={{ page - 1 }}" class="page-btn">&laquo; Prev</a>
+      {% else %}
+        <span class="page-btn page-btn-disabled">&laquo; Prev</span>
+      {% endif %}
+
+      {% set start_p = [1, page - 2] | max %}
+      {% set end_p   = [total_pages, page + 2] | min %}
+
+      {% if start_p > 1 %}
+        <a href="?page=1" class="page-btn">1</a>
+        {% if start_p > 2 %}<span class="page-ellipsis">…</span>{% endif %}
+      {% endif %}
+
+      {% for p in range(start_p, end_p + 1) %}
+        {% if p == page %}
+          <span class="page-btn page-btn-active">{{ p }}</span>
+        {% else %}
+          <a href="?page={{ p }}" class="page-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if end_p < total_pages %}
+        {% if end_p < total_pages - 1 %}<span class="page-ellipsis">…</span>{% endif %}
+        <a href="?page={{ total_pages }}" class="page-btn">{{ total_pages }}</a>
+      {% endif %}
+
+      {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}" class="page-btn">Next &raquo;</a>
+      {% else %}
+        <span class="page-btn page-btn-disabled">Next &raquo;</span>
+      {% endif %}
+    </nav>
+    {% endif %}
+
+  </div><!-- container -->
+</section>
+{% endblock %}

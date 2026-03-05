@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}500 Server Error — CS:GO MM{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <div class="error-page">
+      <div class="error-code">500</div>
+      <div class="error-title">Internal Server Error</div>
+      <p class="error-desc">
+        Something went wrong on our end. Please try again later.
+      </p>
+      <a href="{{ url_for('leaderboard_bp.leaderboard') }}" class="btn btn-accent">Back to Leaderboard</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}{{ player.name | e }} — CS:GO MM{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+
+    <!-- ================================================================
+         PLAYER HEADER
+    ================================================================ -->
+    <div class="player-header card">
+      <div class="player-header-inner">
+
+        <!-- Avatar placeholder -->
+        <div class="player-avatar" style="background: {{ player.rank_color }}22; border-color: {{ player.rank_color }};">
+          <span class="player-avatar-letter">{{ player.name[0] | upper }}</span>
+        </div>
+
+        <div class="player-header-info">
+          <h1 class="player-name">{{ player.name | e }}</h1>
+          <div class="player-rank-line">
+            <span class="rank-badge rank-badge-lg" style="color: {{ player.rank_color }};">
+              {{ player.rank_name }}
+            </span>
+          </div>
+          <div class="player-elo-line">
+            <span class="player-elo">{{ player.elo }}</span>
+            <span class="player-elo-label">ELO</span>
+            {% if player.elo_peak %}
+              <span class="player-peak">Peak: {{ player.elo_peak }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="player-header-meta">
+          {% if player.last_match %}
+            <div class="meta-item">
+              <span class="meta-label">Last match</span>
+              <span class="meta-value">{{ player.last_match.strftime('%Y-%m-%d') if player.last_match else '—' }}</span>
+            </div>
+          {% endif %}
+          <div class="meta-item">
+            <span class="meta-label">Streak</span>
+            <span class="meta-value {% if player.win_streak and player.win_streak > 0 %}text-success{% elif player.win_streak and player.win_streak < 0 %}text-danger{% endif %}">
+              {% if player.win_streak and player.win_streak > 0 %}
+                +{{ player.win_streak }} W
+              {% elif player.win_streak and player.win_streak < 0 %}
+                {{ player.win_streak }} L
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Steam ID</span>
+            <span class="meta-value mono">{{ player.steam_id }}</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================================================================
+         STAT GRID
+    ================================================================ -->
+    <div class="stat-grid stat-grid-6">
+
+      <div class="stat-card">
+        <div class="stat-card-value">{{ player.matches_played | default(0) }}</div>
+        <div class="stat-card-label">Matches</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-value">
+          {% if player.win_rate_pct %}
+            {{ "%.1f" | format(player.win_rate_pct | float) }}%
+          {% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">Win Rate</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-value">
+          {% if player.kd_ratio %}
+            {{ "%.2f" | format(player.kd_ratio | float) }}
+          {% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">K/D Ratio</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-value">
+          {% if player.hs_pct %}
+            {{ "%.1f" | format(player.hs_pct | float) }}%
+          {% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">HS%</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-value">{{ player.best_streak | default(0) }}</div>
+        <div class="stat-card-label">Best Streak</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-value">{{ player.total_kills | default(0) }}</div>
+        <div class="stat-card-label">Total Kills</div>
+      </div>
+
+    </div>
+
+    <!-- W / L / T mini bar -->
+    {% set gp = player.matches_played | default(0) | int %}
+    {% if gp > 0 %}
+    {% set w = player.matches_won | default(0) | int %}
+    {% set l = player.matches_lost | default(0) | int %}
+    {% set t = player.matches_tied | default(0) | int %}
+    {% set w_pct = (w / gp * 100) | round(1) %}
+    {% set l_pct = (l / gp * 100) | round(1) %}
+    {% set t_pct = (t / gp * 100) | round(1) %}
+    <div class="card wlt-bar-card">
+      <div class="card-body">
+        <div class="wlt-bar-labels">
+          <span class="text-success">{{ w }} W</span>
+          <span class="text-muted">{{ t }} T</span>
+          <span class="text-danger">{{ l }} L</span>
+        </div>
+        <div class="wlt-bar">
+          <div class="wlt-bar-win"  style="width: {{ w_pct }}%"></div>
+          <div class="wlt-bar-tie"  style="width: {{ t_pct }}%"></div>
+          <div class="wlt-bar-loss" style="width: {{ l_pct }}%"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ================================================================
+         ELO HISTORY GRAPH
+    ================================================================ -->
+    {% if elo_values and elo_values | length >= 2 %}
+    <div class="card">
+      <div class="card-header">ELO History (last {{ elo_values | length }} matches)</div>
+      <div class="card-body">
+        <div class="elo-graph">
+          <svg
+            viewBox="0 0 600 120"
+            preserveAspectRatio="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-label="ELO history sparkline"
+          >
+            <!-- Subtle grid lines -->
+            <line x1="0" y1="30"  x2="600" y2="30"  stroke="#2a2a4a" stroke-width="1"/>
+            <line x1="0" y1="60"  x2="600" y2="60"  stroke="#2a2a4a" stroke-width="1"/>
+            <line x1="0" y1="90"  x2="600" y2="90"  stroke="#2a2a4a" stroke-width="1"/>
+
+            <!-- Fill area under the line -->
+            <defs>
+              <linearGradient id="eloGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="#e84545" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#e84545" stop-opacity="0.02"/>
+              </linearGradient>
+            </defs>
+
+            {% if svg_points %}
+            {# Build filled polygon: add bottom-right and bottom-left corners #}
+            {% set pts = svg_points.split(' ') %}
+            {% set last_x  = pts[-1].split(',')[0] %}
+            {% set first_x = pts[0].split(',')[0] %}
+            <polygon
+              points="{{ svg_points }} {{ last_x }},112 {{ first_x }},112"
+              fill="url(#eloGrad)"
+            />
+            <polyline
+              points="{{ svg_points }}"
+              fill="none"
+              stroke="#e84545"
+              stroke-width="2"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+            {% endif %}
+
+            <!-- Min / Max labels -->
+            {% if elo_values %}
+            {% set min_elo = elo_values | min %}
+            {% set max_elo = elo_values | max %}
+            <text x="4"   y="14"  class="elo-graph-label">{{ max_elo }}</text>
+            <text x="4"   y="116" class="elo-graph-label">{{ min_elo }}</text>
+            <text x="296" y="14"  class="elo-graph-label" text-anchor="middle">ELO over time</text>
+            {% endif %}
+          </svg>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ================================================================
+         RECENT MATCHES TABLE
+    ================================================================ -->
+    <div class="card">
+      <div class="card-header">Recent Matches</div>
+      <div class="card-body p-0">
+        {% if recent_matches %}
+        <div class="table-responsive">
+          <table class="mm-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Map</th>
+                <th>Result</th>
+                <th>Score</th>
+                <th>K / D</th>
+                <th>ELO Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in recent_matches %}
+              <tr>
+                <td class="text-muted">
+                  {{ m.ended_at.strftime('%Y-%m-%d') if m.ended_at else '—' }}
+                </td>
+                <td>
+                  <a href="{{ url_for('matches_bp.match_detail', match_id=m.match_id) }}"
+                     class="map-link">{{ m.map_name | e }}</a>
+                </td>
+                <td>
+                  {% if m.result == 'W' %}
+                    <span class="result-badge result-win">WIN</span>
+                  {% elif m.result == 'L' %}
+                    <span class="result-badge result-loss">LOSS</span>
+                  {% else %}
+                    <span class="result-badge result-tie">DRAW</span>
+                  {% endif %}
+                </td>
+                <td class="mono">{{ m.team1_score }}–{{ m.team2_score }}</td>
+                <td class="mono">{{ m.kills }} / {{ m.deaths }}</td>
+                <td>
+                  {% set chg = m.elo_change | default(0) | int %}
+                  {% if chg > 0 %}
+                    <span class="elo-gain">+{{ chg }}</span>
+                  {% elif chg < 0 %}
+                    <span class="elo-loss">{{ chg }}</span>
+                  {% else %}
+                    <span class="text-muted">±0</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          <p class="empty-state">No matches played yet.</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- container -->
+</section>
+{% endblock %}

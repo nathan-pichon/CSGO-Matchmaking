@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard — CS:GO MM{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <h1 class="page-title">Leaderboard</h1>
+      <p class="page-subtitle">{{ total }} players ranked by ELO</p>
+    </div>
+
+    <!-- Controls: season selector -->
+    {% if seasons %}
+    <div class="lb-controls">
+      <form method="get" action="{{ url_for('leaderboard_bp.leaderboard') }}" class="season-form">
+        <label for="seasonSelect" class="form-label">Season:</label>
+        <select id="seasonSelect" name="season" class="form-select" onchange="this.form.submit()">
+          <option value="">All time</option>
+          {% for s in seasons %}
+            <option value="{{ s.id }}"
+              {% if selected_season == s.id %}selected{% endif %}>
+              {{ s.name }}{% if s.is_active %} (Active){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- Leaderboard table -->
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="mm-table lb-table">
+            <thead>
+              <tr>
+                <th class="col-rank">#</th>
+                <th class="col-player">Player</th>
+                <th class="col-rank-badge">Rank</th>
+                <th class="col-elo">ELO</th>
+                <th class="col-matches">GP</th>
+                <th class="col-wlt">W / L / T</th>
+                <th class="col-kd">K/D</th>
+                <th class="col-wr">Win%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              {% set abs_rank = row['rank'] %}
+              <tr class="lb-row
+                {% if abs_rank == 1 %}lb-gold
+                {% elif abs_rank == 2 %}lb-silver
+                {% elif abs_rank == 3 %}lb-bronze
+                {% endif %}">
+
+                <!-- Rank number -->
+                <td class="col-rank">
+                  {% if abs_rank == 1 %}
+                    <span class="lb-rank lb-rank-gold">&#127942; 1</span>
+                  {% elif abs_rank == 2 %}
+                    <span class="lb-rank lb-rank-silver">&#129352; 2</span>
+                  {% elif abs_rank == 3 %}
+                    <span class="lb-rank lb-rank-bronze">&#129353; 3</span>
+                  {% else %}
+                    <span class="lb-rank">{{ abs_rank }}</span>
+                  {% endif %}
+                </td>
+
+                <!-- Player name -->
+                <td class="col-player">
+                  <a href="{{ url_for('players_bp.player_profile', steam_id=row.steam_id) }}"
+                     class="player-link">
+                    {{ row.name | e }}
+                  </a>
+                </td>
+
+                <!-- Rank badge -->
+                <td class="col-rank-badge">
+                  <span class="rank-badge" style="color: {{ row.rank_color }};">
+                    {{ row.rank_name }}
+                  </span>
+                </td>
+
+                <!-- ELO -->
+                <td class="col-elo">
+                  <strong>{{ row.elo }}</strong>
+                </td>
+
+                <!-- Matches played -->
+                <td class="col-matches">{{ row.matches_played }}</td>
+
+                <!-- W / L / T -->
+                <td class="col-wlt">
+                  <span class="text-success">{{ row.matches_won | default(0) }}</span>
+                  <span class="wlt-sep">/</span>
+                  <span class="text-danger">{{ row.matches_lost | default(0) }}</span>
+                  <span class="wlt-sep">/</span>
+                  <span class="text-muted">{{ row.matches_tied | default(0) }}</span>
+                </td>
+
+                <!-- K/D -->
+                <td class="col-kd">
+                  {% if row.kd_ratio %}
+                    {{ "%.2f" | format(row.kd_ratio | float) }}
+                  {% else %}—{% endif %}
+                </td>
+
+                <!-- Win % -->
+                <td class="col-wr">
+                  {% if row.win_rate_pct %}
+                    {{ "%.1f" | format(row.win_rate_pct | float) }}%
+                  {% else %}—{% endif %}
+                </td>
+
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="8" class="table-empty">No players found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div><!-- table-responsive -->
+      </div>
+    </div><!-- card -->
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Leaderboard pages">
+      {% if page > 1 %}
+        <a href="?page={{ page - 1 }}{% if selected_season %}&season={{ selected_season }}{% endif %}"
+           class="page-btn">&laquo; Prev</a>
+      {% else %}
+        <span class="page-btn page-btn-disabled">&laquo; Prev</span>
+      {% endif %}
+
+      {% set start_p = [1, page - 2] | max %}
+      {% set end_p   = [total_pages, page + 2] | min %}
+
+      {% if start_p > 1 %}
+        <a href="?page=1{% if selected_season %}&season={{ selected_season }}{% endif %}" class="page-btn">1</a>
+        {% if start_p > 2 %}<span class="page-ellipsis">…</span>{% endif %}
+      {% endif %}
+
+      {% for p in range(start_p, end_p + 1) %}
+        {% if p == page %}
+          <span class="page-btn page-btn-active">{{ p }}</span>
+        {% else %}
+          <a href="?page={{ p }}{% if selected_season %}&season={{ selected_season }}{% endif %}"
+             class="page-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if end_p < total_pages %}
+        {% if end_p < total_pages - 1 %}<span class="page-ellipsis">…</span>{% endif %}
+        <a href="?page={{ total_pages }}{% if selected_season %}&season={{ selected_season }}{% endif %}"
+           class="page-btn">{{ total_pages }}</a>
+      {% endif %}
+
+      {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}{% if selected_season %}&season={{ selected_season }}{% endif %}"
+           class="page-btn">Next &raquo;</a>
+      {% else %}
+        <span class="page-btn page-btn-disabled">Next &raquo;</span>
+      {% endif %}
+    </nav>
+    {% endif %}
+
+  </div><!-- container -->
+</section>
+{% endblock %}

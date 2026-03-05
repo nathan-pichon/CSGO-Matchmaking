@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}CS:GO Matchmaking{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <!-- ================================================================
+       NAVBAR
+  ================================================================ -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a class="navbar-logo" href="{{ url_for('leaderboard_bp.leaderboard') }}">
+        <span class="logo-bracket">[</span>CS:GO<span class="logo-accent">MM</span><span class="logo-bracket">]</span>
+      </a>
+
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+
+      <ul class="navbar-links" id="navLinks">
+        <li>
+          <a href="{{ url_for('leaderboard_bp.leaderboard') }}"
+             class="nav-link {% if request.endpoint == 'leaderboard_bp.leaderboard' %}active{% endif %}">
+            Leaderboard
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('matches_bp.match_list') }}"
+             class="nav-link {% if request.endpoint == 'matches_bp.match_list' %}active{% endif %}">
+            Matches
+          </a>
+        </li>
+        <li class="nav-queue">
+          <span class="queue-badge">
+            <span class="queue-dot"></span>
+            {{ queue_count }} in queue
+          </span>
+        </li>
+      </ul>
+
+      <!-- Search form in navbar -->
+      <form class="nav-search" action="{{ url_for('players_bp.player_search') }}" method="get">
+        <input type="text" name="q" placeholder="Search player…" class="nav-search-input" autocomplete="off" />
+        <button type="submit" class="nav-search-btn" aria-label="Search">&#9906;</button>
+      </form>
+    </div>
+  </nav>
+
+  <!-- ================================================================
+       FLASH MESSAGES
+  ================================================================ -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ================================================================
+       MAIN CONTENT
+  ================================================================ -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ================================================================
+       FOOTER
+  ================================================================ -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <span class="footer-logo">[CSGO<span class="logo-accent">MM</span>]</span>
+      <span class="footer-sep">|</span>
+      <span>CS:GO Matchmaking Community</span>
+      <span class="footer-sep">|</span>
+      <span>Non-commercial</span>
+      <span class="footer-sep">|</span>
+      <span>Legacy CS:GO</span>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile nav toggle
+    const toggle = document.getElementById('navToggle');
+    const links  = document.getElementById('navLinks');
+    if (toggle && links) {
+      toggle.addEventListener('click', () => links.classList.toggle('open'));
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

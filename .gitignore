@@ -1,0 +1,50 @@
+# Environment & secrets
+config.env
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# SourcePawn compiled plugins
+*.smx
+
+# CS:GO server files (downloaded at install)
+csgo-server/
+steamcmd/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Database dumps
+backups/
+*.sql.gz
+
+# OS
+Thumbs.db
+
+# Claude
+.claude/

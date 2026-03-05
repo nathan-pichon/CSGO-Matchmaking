@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Match #{{ match.id }} — {{ match.map_name }} — CS:GO MM{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+
+    <!-- ================================================================
+         MATCH HEADER
+    ================================================================ -->
+    <div class="match-detail-header card">
+      <div class="match-detail-map-bg map-{{ match.map_name | lower | replace('de_', '') | replace(' ', '_') }}"></div>
+      <div class="match-detail-header-inner">
+
+        <div class="match-detail-map">
+          <span class="match-detail-map-label">MAP</span>
+          <span class="match-detail-map-name">{{ match.map_name | upper | e }}</span>
+        </div>
+
+        <div class="match-detail-score-block">
+          <div class="match-detail-team-label
+            {% if match.winner == 1 %}team-winner{% elif match.winner == 2 %}team-loser{% endif %}">
+            Team 1
+          </div>
+          <div class="match-detail-score">
+            <span class="mds-score {% if match.winner == 1 %}score-winner{% elif match.winner == 2 %}score-loser{% endif %}">
+              {{ match.team1_score }}
+            </span>
+            <span class="mds-sep">:</span>
+            <span class="mds-score {% if match.winner == 2 %}score-winner{% elif match.winner == 1 %}score-loser{% endif %}">
+              {{ match.team2_score }}
+            </span>
+          </div>
+          <div class="match-detail-team-label
+            {% if match.winner == 2 %}team-winner{% elif match.winner == 1 %}team-loser{% endif %}">
+            Team 2
+          </div>
+        </div>
+
+        <div class="match-detail-meta">
+          {% if match.ended_at %}
+            <div class="meta-item">
+              <span class="meta-label">Date</span>
+              <span class="meta-value">{{ match.ended_at.strftime('%d %b %Y %H:%M') }}</span>
+            </div>
+          {% endif %}
+          {% if match.duration_minutes %}
+            <div class="meta-item">
+              <span class="meta-label">Duration</span>
+              <span class="meta-value">{{ match.duration_minutes }} min</span>
+            </div>
+          {% endif %}
+          <div class="meta-item">
+            <span class="meta-label">Match ID</span>
+            <span class="meta-value mono">#{{ match.id }}</span>
+          </div>
+          {% if match.winner %}
+            <div class="meta-item">
+              <span class="meta-label">Winner</span>
+              <span class="meta-value text-success">Team {{ match.winner }}</span>
+            </div>
+          {% else %}
+            <div class="meta-item">
+              <span class="meta-label">Result</span>
+              <span class="meta-value text-muted">Draw</span>
+            </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MVP highlight -->
+    {% if match_mvp_sid %}
+    {% set mvp_player = (team1 + team2) | selectattr('steam_id', 'eq', match_mvp_sid) | first %}
+    {% if mvp_player %}
+    <div class="mvp-banner">
+      <span class="mvp-star">&#11088;</span>
+      <span class="mvp-label">Match MVP</span>
+      <a href="{{ url_for('players_bp.player_profile', steam_id=mvp_player.steam_id) }}"
+         class="mvp-name">{{ mvp_player.name | e }}</a>
+      <span class="mvp-stat">{{ mvp_player.mvps }} MVP star{% if mvp_player.mvps != 1 %}s{% endif %}</span>
+      <span class="mvp-stat">{{ mvp_player.kills }} / {{ mvp_player.deaths }} / {{ mvp_player.assists }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- ================================================================
+         SCOREBOARDS
+    ================================================================ -->
+    <div class="scoreboards">
+
+      <!-- Team 1 -->
+      <div class="scoreboard-wrapper">
+        <div class="team-header {% if match.winner == 1 %}team-header-win{% elif match.winner == 2 %}team-header-loss{% else %}team-header-tie{% endif %}">
+          <span class="team-header-name">Team 1</span>
+          <span class="team-header-score">{{ match.team1_score }}</span>
+          <span class="team-header-result">
+            {% if match.winner == 1 %}WIN
+            {% elif match.winner == 2 %}LOSS
+            {% else %}DRAW
+            {% endif %}
+          </span>
+        </div>
+        <div class="table-responsive">
+          <table class="mm-table scoreboard">
+            <thead>
+              <tr>
+                <th class="col-player">Player</th>
+                <th title="Kills">K</th>
+                <th title="Deaths">D</th>
+                <th title="Assists">A</th>
+                <th title="Headshot Percentage">HS%</th>
+                <th title="Score">SCR</th>
+                <th title="Damage">DMG</th>
+                <th title="MVP Stars">MVP</th>
+                <th title="ELO Change">ELO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in team1 %}
+              <tr class="player-row
+                {% if p.steam_id == top_fragger_sid %}top-fragger{% endif %}
+                {% if p.steam_id == match_mvp_sid %}match-mvp-row{% endif %}">
+
+                <td class="col-player">
+                  <a href="{{ url_for('players_bp.player_profile', steam_id=p.steam_id) }}"
+                     class="player-link">
+                    {% if p.is_captain %}<span class="captain-star" title="Captain">&#9733;</span>{% endif %}
+                    {{ p.name | default(p.steam_id) | e }}
+                  </a>
+                  <span class="rank-badge-sm" style="color: {{ p.rank_color }};">{{ p.rank_name }}</span>
+                </td>
+                <td class="mono"><strong>{{ p.kills }}</strong></td>
+                <td class="mono">{{ p.deaths }}</td>
+                <td class="mono">{{ p.assists }}</td>
+                <td class="mono">{{ "%.0f" | format((p.hs_pct or 0) | float) }}%</td>
+                <td class="mono">{{ p.score }}</td>
+                <td class="mono">{{ p.damage | default(0) }}</td>
+                <td class="mono">
+                  {% for _ in range(p.mvps | default(0) | int) %}&#11088;{% endfor %}
+                  {% if not p.mvps or p.mvps == 0 %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="mono">
+                  {% set chg = p.elo_change | default(0) | int %}
+                  {% if chg > 0 %}
+                    <span class="elo-gain">+{{ chg }}</span>
+                  {% elif chg < 0 %}
+                    <span class="elo-loss">{{ chg }}</span>
+                  {% else %}
+                    <span class="text-muted">±0</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="9" class="table-empty">No player data.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div><!-- scoreboard-wrapper team1 -->
+
+      <!-- Team 2 -->
+      <div class="scoreboard-wrapper">
+        <div class="team-header {% if match.winner == 2 %}team-header-win{% elif match.winner == 1 %}team-header-loss{% else %}team-header-tie{% endif %}">
+          <span class="team-header-name">Team 2</span>
+          <span class="team-header-score">{{ match.team2_score }}</span>
+          <span class="team-header-result">
+            {% if match.winner == 2 %}WIN
+            {% elif match.winner == 1 %}LOSS
+            {% else %}DRAW
+            {% endif %}
+          </span>
+        </div>
+        <div class="table-responsive">
+          <table class="mm-table scoreboard">
+            <thead>
+              <tr>
+                <th class="col-player">Player</th>
+                <th title="Kills">K</th>
+                <th title="Deaths">D</th>
+                <th title="Assists">A</th>
+                <th title="Headshot Percentage">HS%</th>
+                <th title="Score">SCR</th>
+                <th title="Damage">DMG</th>
+                <th title="MVP Stars">MVP</th>
+                <th title="ELO Change">ELO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in team2 %}
+              <tr class="player-row
+                {% if p.steam_id == top_fragger_sid %}top-fragger{% endif %}
+                {% if p.steam_id == match_mvp_sid %}match-mvp-row{% endif %}">
+
+                <td class="col-player">
+                  <a href="{{ url_for('players_bp.player_profile', steam_id=p.steam_id) }}"
+                     class="player-link">
+                    {% if p.is_captain %}<span class="captain-star" title="Captain">&#9733;</span>{% endif %}
+                    {{ p.name | default(p.steam_id) | e }}
+                  </a>
+                  <span class="rank-badge-sm" style="color: {{ p.rank_color }};">{{ p.rank_name }}</span>
+                </td>
+                <td class="mono"><strong>{{ p.kills }}</strong></td>
+                <td class="mono">{{ p.deaths }}</td>
+                <td class="mono">{{ p.assists }}</td>
+                <td class="mono">{{ "%.0f" | format((p.hs_pct or 0) | float) }}%</td>
+                <td class="mono">{{ p.score }}</td>
+                <td class="mono">{{ p.damage | default(0) }}</td>
+                <td class="mono">
+                  {% for _ in range(p.mvps | default(0) | int) %}&#11088;{% endfor %}
+                  {% if not p.mvps or p.mvps == 0 %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="mono">
+                  {% set chg = p.elo_change | default(0) | int %}
+                  {% if chg > 0 %}
+                    <span class="elo-gain">+{{ chg }}</span>
+                  {% elif chg < 0 %}
+                    <span class="elo-loss">{{ chg }}</span>
+                  {% else %}
+                    <span class="text-muted">±0</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="9" class="table-empty">No player data.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div><!-- scoreboard-wrapper team2 -->
+
+    </div><!-- scoreboards -->
+
+    <div class="back-link-row">
+      <a href="{{ url_for('matches_bp.match_list') }}" class="btn btn-outline">&larr; All Matches</a>
+    </div>
+
+  </div><!-- container -->
+</section>
+{% endblock %}
