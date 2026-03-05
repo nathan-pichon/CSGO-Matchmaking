@@ -1,207 +1,207 @@
-# Référence de configuration — `config.env`
+# Configuration Reference — `config.env`
 
-Ce document décrit l'ensemble des variables de configuration disponibles dans le fichier `config.env`.
-Copiez `config.example.env` en `config.env` et adaptez chaque valeur à votre environnement avant le premier démarrage.
+This document describes all configuration variables available in the `config.env` file.
+Copy `config.example.env` to `config.env` and adjust each value to your environment before first startup.
 
-> **Important :** Ne commitez jamais votre fichier `config.env` dans un dépôt public. Il contient des secrets (mots de passe, clés, webhooks).
+> **Important:** Never commit your `config.env` file to a public repository. It contains secrets (passwords, keys, webhooks).
 
 ---
 
-## Table des matières
+## Table of Contents
 
-1. [Base de données](#base-de-données)
-2. [Serveur de lobby](#serveur-de-lobby)
+1. [Database](#database)
+2. [Lobby Server](#lobby-server)
 3. [Matchmaking](#matchmaking)
-4. [Système ELO](#système-elo)
+4. [ELO System](#elo-system)
 5. [Backends](#backends)
 6. [Docker](#docker)
-7. [Panneau web](#panneau-web)
+7. [Web Panel](#web-panel)
 8. [Discord](#discord)
 9. [Levels Ranks (LR)](#levels-ranks-lr)
-10. [Système de ranking ELO — Paliers](#système-de-ranking-elo--paliers)
+10. [ELO Ranking System — Tiers](#elo-ranking-system--tiers)
 
 ---
 
-## Base de données
+## Database
 
-Ces variables configurent la connexion à la base de données MariaDB/MySQL utilisée par tous les composants.
+These variables configure the connection to the MariaDB/MySQL database used by all components.
 
-| Variable  | Valeur par défaut  | Description |
+| Variable  | Default Value      | Description |
 |-----------|--------------------|-------------|
-| `DB_HOST` | `localhost`        | Adresse IP ou nom d'hôte du serveur de base de données. Utilisez `db` si vous passez par le réseau Docker Compose. |
-| `DB_PORT` | `3306`             | Port TCP du serveur MySQL/MariaDB. Modifier uniquement si votre instance écoute sur un port non standard. |
-| `DB_USER` | `csgo_mm`          | Nom d'utilisateur MySQL. Doit correspondre à l'utilisateur créé lors de l'installation. |
-| `DB_PASS` | `CHANGE_ME`        | Mot de passe de l'utilisateur MySQL. **Obligatoire à modifier** avant la mise en production. |
-| `DB_NAME` | `csgo_matchmaking` | Nom de la base de données. La base doit exister et l'utilisateur doit disposer de tous les privilèges sur celle-ci. |
+| `DB_HOST` | `localhost`        | IP address or hostname of the database server. Use `db` if routing through a Docker Compose network. |
+| `DB_PORT` | `3306`             | TCP port of the MySQL/MariaDB server. Only change if your instance listens on a non-standard port. |
+| `DB_USER` | `csgo_mm`          | MySQL username. Must match the user created during installation. |
+| `DB_PASS` | `CHANGE_ME`        | MySQL user password. **Must be changed** before going to production. |
+| `DB_NAME` | `csgo_matchmaking` | Database name. The database must exist and the user must have full privileges on it. |
 
-**Remarques :**
-- En environnement Docker Compose, `DB_HOST` doit correspondre au nom du service (ex. `db`) plutôt qu'à `localhost`.
-- Assurez-vous que le port `DB_PORT` est accessible depuis le serveur de lobby, le matchmaker et le panneau web.
+**Notes:**
+- In a Docker Compose environment, `DB_HOST` should match the service name (e.g. `db`) rather than `localhost`.
+- Ensure that `DB_PORT` is reachable from the lobby server, matchmaker, and web panel.
 
 ---
 
-## Serveur de lobby
+## Lobby Server
 
-Ces variables contrôlent les adresses d'écoute du serveur de jeu SourceMod et du composant lobby.
+These variables control the listen addresses of the SourceMod game server and lobby component.
 
-| Variable      | Valeur par défaut | Description |
-|---------------|-------------------|-------------|
-| `SERVER_IP`   | `0.0.0.0`         | Adresse IP publique ou interface d'écoute principale du serveur de jeu. Utilisez `0.0.0.0` pour écouter sur toutes les interfaces, ou spécifiez une IP précise pour restreindre l'accès. |
-| `LOBBY_IP`    | `0.0.0.0`         | Adresse d'écoute du serveur de lobby CS:GO. Généralement identique à `SERVER_IP`. |
-| `LOBBY_PORT`  | `27015`           | Port UDP/TCP du serveur de lobby. C'est le port auquel les joueurs se connectent via `connect IP:27015`. |
-| `RCON_PASSWORD` | `CHANGE_ME`     | Mot de passe RCON du serveur de lobby. Utilisé par le matchmaker pour envoyer des commandes à distance (déplacement des joueurs, messages, etc.). **Obligatoire à modifier.** |
+| Variable        | Default Value | Description |
+|-----------------|---------------|-------------|
+| `SERVER_IP`     | `0.0.0.0`     | Public IP address or main listen interface of the game server. Use `0.0.0.0` to listen on all interfaces, or specify a precise IP to restrict access. |
+| `LOBBY_IP`      | `0.0.0.0`     | Listen address of the CS:GO lobby server. Generally the same as `SERVER_IP`. |
+| `LOBBY_PORT`    | `27015`        | UDP/TCP port of the lobby server. This is the port players connect to via `connect IP:27015`. |
+| `RCON_PASSWORD` | `CHANGE_ME`   | RCON password for the lobby server. Used by the matchmaker to send remote commands (moving players, messages, etc.). **Must be changed.** |
 
-**Remarques :**
-- Si vous déployez derrière un pare-feu ou un NAT, `SERVER_IP` doit contenir l'IP publique réelle du serveur.
-- Le port `LOBBY_PORT` doit être ouvert en UDP dans votre pare-feu.
-- Un `RCON_PASSWORD` faible expose votre serveur à des prises de contrôle malveillantes.
+**Notes:**
+- If deploying behind a firewall or NAT, `SERVER_IP` must contain the server's actual public IP.
+- The `LOBBY_PORT` must be open for UDP in your firewall.
+- A weak `RCON_PASSWORD` exposes your server to malicious takeovers.
 
 ---
 
 ## Matchmaking
 
-Ces variables pilotent le comportement du matchmaker : fréquence de vérification, composition des équipes et délais.
+These variables drive the matchmaker's behaviour: check frequency, team composition, and timeouts.
 
-| Variable                        | Valeur par défaut | Description |
-|---------------------------------|-------------------|-------------|
-| `POLL_INTERVAL`                 | `2.0`             | Intervalle en secondes entre chaque cycle de vérification de la file d'attente par le matchmaker. Une valeur plus faible réduit la latence de formation des parties, mais augmente la charge sur la base de données. Valeur recommandée : `1.0` à `5.0`. |
-| `PLAYERS_PER_TEAM`              | `5`               | Nombre de joueurs par équipe. Valeur standard CS:GO : `5`. Pour des modes de test ou des parties personnalisées, vous pouvez réduire à `1` ou `2`. |
-| `MAX_ELO_SPREAD`                | `200`             | Écart ELO maximum autorisé entre les joueurs au moment de la formation initiale d'une partie. Un écart plus faible garantit des parties équilibrées mais allonge les temps d'attente. |
-| `ELO_SPREAD_INCREASE_INTERVAL`  | `60`              | Durée en secondes après laquelle la tolérance d'écart ELO est élargie si aucune partie n'a pu être formée. Permet de réduire les temps d'attente en cas de faible population. |
-| `ELO_SPREAD_INCREASE_AMOUNT`    | `50`              | Valeur d'ELO ajoutée à la tolérance d'écart à chaque intervalle défini par `ELO_SPREAD_INCREASE_INTERVAL`. |
-| `READY_CHECK_TIMEOUT`           | `30`              | Délai en secondes accordé aux joueurs pour accepter ou refuser la partie lors de la phase de vérification. Passé ce délai, les joueurs n'ayant pas répondu reçoivent un ban temporaire. |
-| `WARMUP_TIMEOUT`                | `180`             | Durée maximale en secondes de la phase de warm-up sur le serveur de match, dans l'attente que tous les joueurs se connectent. Au-delà, la partie est annulée et les joueurs sont renvoyés vers le lobby. |
-| `MIN_PLACEMENT_MATCHES`         | `10`              | Nombre de parties de placement obligatoires avant qu'un joueur soit considéré comme « classé ». Pendant cette période, le facteur K ELO est plus élevé (`ELO_K_FACTOR_NEW`). |
+| Variable                        | Default Value | Description |
+|---------------------------------|---------------|-------------|
+| `POLL_INTERVAL`                 | `2.0`         | Interval in seconds between each queue check cycle by the matchmaker. A lower value reduces match formation latency but increases database load. Recommended: `1.0` to `5.0`. |
+| `PLAYERS_PER_TEAM`              | `5`           | Number of players per team. Standard CS:GO value: `5`. For test modes or custom games, you can reduce to `1` or `2`. |
+| `MAX_ELO_SPREAD`                | `200`         | Maximum ELO difference allowed between players at initial match formation. A lower spread guarantees more balanced matches but increases wait times. |
+| `ELO_SPREAD_INCREASE_INTERVAL`  | `60`          | Time in seconds after which the ELO spread tolerance is widened if no match could be formed. Reduces wait times when the player population is low. |
+| `ELO_SPREAD_INCREASE_AMOUNT`    | `50`          | ELO value added to the spread tolerance at each interval defined by `ELO_SPREAD_INCREASE_INTERVAL`. |
+| `READY_CHECK_TIMEOUT`           | `30`          | Time in seconds given to players to accept or decline a match during the ready check phase. Players who do not respond within this window receive a temporary ban. |
+| `WARMUP_TIMEOUT`                | `180`         | Maximum duration in seconds of the warmup phase on the match server, waiting for all players to connect. After this, the match is cancelled and players are sent back to the lobby. |
+| `MIN_PLACEMENT_MATCHES`         | `10`          | Number of mandatory placement matches before a player is considered "ranked". During this period, the ELO K-factor is higher (`ELO_K_FACTOR_NEW`). |
 
-**Remarques :**
-- `PLAYERS_PER_TEAM` modifie le nombre total de joueurs requis pour lancer une partie : `PLAYERS_PER_TEAM × 2`.
-- L'algorithme d'élargissement progressif (`ELO_SPREAD_INCREASE_INTERVAL` + `ELO_SPREAD_INCREASE_AMOUNT`) s'applique individuellement à chaque joueur en file d'attente, en fonction de son temps d'attente personnel.
+**Notes:**
+- `PLAYERS_PER_TEAM` changes the total number of players required to start a match: `PLAYERS_PER_TEAM × 2`.
+- The progressive widening algorithm (`ELO_SPREAD_INCREASE_INTERVAL` + `ELO_SPREAD_INCREASE_AMOUNT`) applies individually to each queued player based on their personal wait time.
 
 ---
 
-## Système ELO
+## ELO System
 
-Ces variables configurent le moteur de calcul ELO utilisé pour les gains et pertes de points après chaque partie.
+These variables configure the ELO calculation engine used for point gains and losses after each match.
 
-| Variable           | Valeur par défaut | Description |
-|--------------------|-------------------|-------------|
-| `ELO_K_FACTOR`     | `32`              | Facteur K standard appliqué aux joueurs ayant terminé leur période de placement (≥ `MIN_PLACEMENT_MATCHES` parties). Détermine la variation maximale d'ELO par partie. |
-| `ELO_K_FACTOR_NEW` | `64`              | Facteur K utilisé pendant la période de placement (< `MIN_PLACEMENT_MATCHES` parties). Plus élevé pour permettre un positionnement rapide dans le classement. |
-| `ELO_DEFAULT`      | `1000`            | Score ELO attribué à tout nouveau joueur n'ayant pas encore de score enregistré. Correspond au rang Master Guardian I. |
+| Variable           | Default Value | Description |
+|--------------------|---------------|-------------|
+| `ELO_K_FACTOR`     | `32`          | Standard K-factor applied to players who have completed their placement period (≥ `MIN_PLACEMENT_MATCHES` matches). Determines the maximum ELO change per match. |
+| `ELO_K_FACTOR_NEW` | `64`          | K-factor used during the placement period (< `MIN_PLACEMENT_MATCHES` matches). Higher value allows rapid positioning in the rankings. |
+| `ELO_DEFAULT`      | `1000`        | ELO score assigned to any new player with no existing score. Corresponds to the Master Guardian I rank. |
 
-**Remarques :**
-- Plus le facteur K est élevé, plus les gains et pertes d'ELO sont importants après chaque partie.
-- Un facteur K de `32` correspond à la valeur classique utilisée aux échecs pour les joueurs établis.
-- Il est possible d'implémenter un troisième palier (ex. K=24 pour les joueurs vétérans avec plus de 30 parties) directement dans le code du matchmaker.
+**Notes:**
+- A higher K-factor means larger ELO gains and losses per match.
+- A K-factor of `32` corresponds to the classic value used in chess for established players.
+- A third tier (e.g. K=24 for veteran players with more than 30 matches) can be implemented directly in the matchmaker code.
 
 ---
 
 ## Backends
 
-Ces variables sélectionnent les implémentations modulaires utilisées pour chaque sous-système. Chaque backend correspond à un pilote interchangeable.
+These variables select the modular implementations used for each subsystem. Each backend corresponds to a swappable driver.
 
-| Variable                | Valeur par défaut | Valeurs possibles              | Description |
-|-------------------------|-------------------|--------------------------------|-------------|
-| `QUEUE_BACKEND`         | `mysql`           | `mysql`                        | Pilote de gestion de la file d'attente. Actuellement seul `mysql` est supporté. |
-| `SERVER_BACKEND`        | `docker`          | `docker`                       | Pilote de provisionnement des serveurs de match. `docker` lance un conteneur par partie. |
-| `NOTIFICATION_BACKEND`  | `discord`         | `discord`, `none`              | Pilote de notification externe. `discord` envoie des messages via webhook. `none` désactive les notifications. |
-| `RANKING_BACKEND`       | `elo`             | `elo`                          | Algorithme de classement utilisé pour le calcul des scores. Actuellement seul `elo` est supporté. |
+| Variable                | Default Value | Possible Values              | Description |
+|-------------------------|---------------|------------------------------|-------------|
+| `QUEUE_BACKEND`         | `mysql`       | `mysql`                      | Queue management driver. Currently only `mysql` is supported. |
+| `SERVER_BACKEND`        | `docker`      | `docker`                     | Match server provisioning driver. `docker` launches one container per match. |
+| `NOTIFICATION_BACKEND`  | `discord`     | `discord`, `none`            | External notification driver. `discord` sends messages via webhook. `none` disables notifications. |
+| `RANKING_BACKEND`       | `elo`         | `elo`                        | Ranking algorithm used for score calculation. Currently only `elo` is supported. |
 
 ---
 
 ## Docker
 
-Ces variables contrôlent le comportement du backend Docker, responsable du lancement des conteneurs de serveurs de match.
+These variables control the behaviour of the Docker backend, responsible for launching match server containers.
 
-| Variable         | Valeur par défaut          | Description |
+| Variable         | Default Value              | Description |
 |------------------|----------------------------|-------------|
-| `DOCKER_IMAGE`   | `csgo-match-server:latest` | Nom et tag de l'image Docker utilisée pour lancer chaque serveur de match. L'image doit être construite ou disponible localement avant le premier démarrage du matchmaker. |
-| `DOCKER_NETWORK` | `host`                     | Réseau Docker auquel les conteneurs de match sont rattachés. `host` donne un accès direct aux interfaces réseau de l'hôte, ce qui est recommandé pour les serveurs de jeu (performances réseau optimales). Utilisez un réseau nommé si vous souhaitez isoler les conteneurs. |
+| `DOCKER_IMAGE`   | `csgo-match-server:latest` | Name and tag of the Docker image used to launch each match server. The image must be built or available locally before the matchmaker's first startup. |
+| `DOCKER_NETWORK` | `host`                     | Docker network to which match containers are attached. `host` gives direct access to the host's network interfaces, which is recommended for game servers (optimal network performance). Use a named network if you want to isolate containers. |
 
-**Remarques :**
-- Le mode réseau `host` n'est disponible que sous Linux. Sur macOS ou Windows, utilisez un réseau Docker nommé.
-- Assurez-vous que le démon Docker est accessible par le processus matchmaker (appartenance au groupe `docker` ou accès root).
+**Notes:**
+- `host` network mode is only available on Linux. On macOS or Windows, use a named Docker network.
+- Ensure the Docker daemon is accessible by the matchmaker process (membership in the `docker` group or root access).
 
 ---
 
-## Panneau web
+## Web Panel
 
-Ces variables configurent le serveur HTTP du panneau d'administration et de statistiques.
+These variables configure the HTTP server for the admin and statistics panel.
 
-| Variable     | Valeur par défaut | Description |
-|--------------|-------------------|-------------|
-| `WEB_HOST`   | `0.0.0.0`         | Interface d'écoute du serveur web Flask. `0.0.0.0` expose le panneau sur toutes les interfaces. Spécifiez `127.0.0.1` pour le restreindre à un accès local (recommandé si un reverse proxy est utilisé). |
-| `WEB_PORT`   | `5000`            | Port TCP sur lequel le panneau web est accessible. Par défaut : `http://IP:5000`. |
-| `SECRET_KEY` | `CHANGE_ME`       | Clé secrète Flask utilisée pour signer les cookies de session. **Doit être une chaîne aléatoire longue et unique en production.** Générez-en une avec : `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| Variable     | Default Value | Description |
+|--------------|---------------|-------------|
+| `WEB_HOST`   | `0.0.0.0`     | Listen interface of the Flask web server. `0.0.0.0` exposes the panel on all interfaces. Specify `127.0.0.1` to restrict to local access (recommended if a reverse proxy is used). |
+| `WEB_PORT`   | `5000`        | TCP port on which the web panel is accessible. Default: `http://IP:5000`. |
+| `SECRET_KEY` | `CHANGE_ME`   | Flask secret key used to sign session cookies. **Must be a long, unique random string in production.** Generate one with: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
 
-**Remarques :**
-- En production, placez le panneau web derrière un reverse proxy (nginx, Caddy) avec HTTPS.
-- Ne laissez jamais `SECRET_KEY` à sa valeur par défaut `CHANGE_ME` en production.
+**Notes:**
+- In production, place the web panel behind a reverse proxy (nginx, Caddy) with HTTPS.
+- Never leave `SECRET_KEY` at its default `CHANGE_ME` value in production.
 
 ---
 
 ## Discord
 
-| Variable              | Valeur par défaut | Description |
-|-----------------------|-------------------|-------------|
-| `DISCORD_WEBHOOK_URL` | *(vide)*          | URL du webhook Discord vers lequel les notifications de match (début de partie, résultat, erreurs) sont envoyées. Laissez vide pour désactiver, ou positionnez `NOTIFICATION_BACKEND=none`. |
+| Variable              | Default Value | Description |
+|-----------------------|---------------|-------------|
+| `DISCORD_WEBHOOK_URL` | *(empty)*     | Discord webhook URL to which match notifications (match start, result, errors) are sent. Leave empty to disable, or set `NOTIFICATION_BACKEND=none`. |
 
-**Remarques :**
-- Pour créer un webhook : paramètres du salon Discord → Intégrations → Webhooks → Nouveau webhook.
-- Le webhook reçoit un message à chaque début et fin de partie, ainsi qu'en cas d'erreur critique du matchmaker.
+**Notes:**
+- To create a webhook: Discord channel settings → Integrations → Webhooks → New Webhook.
+- The webhook receives a message at each match start and end, as well as on critical matchmaker errors.
 
 ---
 
 ## Levels Ranks (LR)
 
-| Variable        | Valeur par défaut | Description |
-|-----------------|-------------------|-------------|
-| `LR_TABLE_NAME` | `lvl_base`        | Nom de la table MySQL utilisée par le plugin SourceMod Levels Ranks. Modifiez cette valeur uniquement si votre installation LR utilise un nom de table personnalisé. |
+| Variable        | Default Value | Description |
+|-----------------|---------------|-------------|
+| `LR_TABLE_NAME` | `lvl_base`    | Name of the MySQL table used by the Levels Ranks SourceMod plugin. Only change this if your LR installation uses a custom table name. |
 
 ---
 
-## Système de ranking ELO — Paliers
+## ELO Ranking System — Tiers
 
-Le classement est découpé en **18 paliers** inspirés du système de rangs de CS:GO. Le palier affiché est déterminé automatiquement à partir du score ELO courant du joueur.
+The ranking is divided into **18 tiers** inspired by the CS:GO rank system. The displayed tier is automatically determined from the player's current ELO score.
 
-| Palier | Rang                          | Plage ELO   |
-|--------|-------------------------------|-------------|
-| 1      | Silver I                      | 0 – 99      |
-| 2      | Silver II                     | 100 – 199   |
-| 3      | Silver III                    | 200 – 299   |
-| 4      | Silver IV                     | 300 – 399   |
-| 5      | Silver Elite                  | 400 – 499   |
-| 6      | Silver Elite Master           | 500 – 599   |
-| 7      | Gold Nova I                   | 600 – 699   |
-| 8      | Gold Nova II                  | 700 – 799   |
-| 9      | Gold Nova III                 | 800 – 899   |
-| 10     | Gold Nova Master              | 900 – 999   |
-| 11     | Master Guardian I             | 1000 – 1099 |
-| 12     | Master Guardian II            | 1100 – 1199 |
-| 13     | Master Guardian Elite         | 1200 – 1299 |
-| 14     | Distinguished Master Guardian | 1300 – 1499 |
-| 15     | Legendary Eagle               | 1500 – 1699 |
-| 16     | Legendary Eagle Master        | 1700 – 1899 |
-| 17     | Supreme Master First Class    | 1900 – 2099 |
-| 18     | Global Elite                  | 2100 +      |
+| Tier | Rank                          | ELO Range   |
+|------|-------------------------------|-------------|
+| 1    | Silver I                      | 0 – 99      |
+| 2    | Silver II                     | 100 – 199   |
+| 3    | Silver III                    | 200 – 299   |
+| 4    | Silver IV                     | 300 – 399   |
+| 5    | Silver Elite                  | 400 – 499   |
+| 6    | Silver Elite Master           | 500 – 599   |
+| 7    | Gold Nova I                   | 600 – 699   |
+| 8    | Gold Nova II                  | 700 – 799   |
+| 9    | Gold Nova III                 | 800 – 899   |
+| 10   | Gold Nova Master              | 900 – 999   |
+| 11   | Master Guardian I             | 1000 – 1099 |
+| 12   | Master Guardian II            | 1100 – 1199 |
+| 13   | Master Guardian Elite         | 1200 – 1299 |
+| 14   | Distinguished Master Guardian | 1300 – 1499 |
+| 15   | Legendary Eagle               | 1500 – 1699 |
+| 16   | Legendary Eagle Master        | 1700 – 1899 |
+| 17   | Supreme Master First Class    | 1900 – 2099 |
+| 18   | Global Elite                  | 2100+       |
 
-**Fonctionnement du calcul ELO :**
+**How ELO is calculated:**
 
-Après chaque partie, le gain ou la perte d'ELO est calculé selon la formule ELO classique :
+After each match, the ELO gain or loss is computed using the classic ELO formula:
 
 ```
-ELO_nouveau = ELO_ancien + K × (Score_réel - Score_attendu)
+New_ELO = Old_ELO + K × (Actual_Score - Expected_Score)
 ```
 
-- `Score_réel` vaut `1` en cas de victoire, `0` en cas de défaite.
-- `Score_attendu` est calculé à partir des ELO respectifs des deux équipes (moyennés).
-- `K` vaut `ELO_K_FACTOR_NEW` (64) pendant les parties de placement, et `ELO_K_FACTOR` (32) ensuite.
+- `Actual_Score` is `1` for a win, `0` for a loss.
+- `Expected_Score` is calculated from the two teams' respective ELOs (averaged).
+- `K` equals `ELO_K_FACTOR_NEW` (64) during placement matches, and `ELO_K_FACTOR` (32) thereafter.
 
-**Exemple :**
+**Example:**
 
-Un joueur à 1050 ELO (Master Guardian I) affronte une équipe moyenne à 1200 ELO.
-- Score attendu ≈ 0.32 (l'équipe adverse est favorite)
-- En cas de **victoire** : +22 ELO environ → 1072
-- En cas de **défaite** : -10 ELO environ → 1040
+A player at 1050 ELO (Master Guardian I) faces a team averaging 1200 ELO.
+- Expected score ≈ 0.32 (the opposing team is favoured)
+- On **win**: approximately +22 ELO → 1072
+- On **loss**: approximately -10 ELO → 1040
 
-Les paliers **Distinguished Master Guardian** (1300–1499) et au-delà ont des plages plus larges, ce qui rend la progression plus difficile et récompense la régularité.
+The **Distinguished Master Guardian** (1300–1499) tiers and above have wider ranges, making progression harder and rewarding consistency.

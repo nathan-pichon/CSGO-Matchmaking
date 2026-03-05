@@ -1,61 +1,61 @@
-# Guide de Maintenance — CS:GO Matchmaking
+# Maintenance Guide — CS:GO Matchmaking
 
-Ce document couvre les opérations courantes de maintenance, surveillance et administration du système CS:GO Matchmaking.
-
----
-
-## Table des matières
-
-1. [Gestion des services](#1-gestion-des-services)
-2. [Surveillance des conteneurs match](#2-surveillance-des-conteneurs-match)
-3. [Health check](#3-health-check)
-4. [Backup et restauration](#4-backup-et-restauration)
-5. [Mise à jour](#5-mise-à-jour)
-6. [Gestion des tokens GSLT](#6-gestion-des-tokens-gslt)
-7. [Gestion du pool de ports](#7-gestion-du-pool-de-ports)
-8. [Administration base de données](#8-administration-base-de-données)
-9. [Gestion des saisons](#9-gestion-des-saisons)
-10. [Logs et debugging](#10-logs-et-debugging)
+This document covers routine maintenance, monitoring, and administration operations for the CS:GO Matchmaking system.
 
 ---
 
-## 1. Gestion des services
+## Table of Contents
 
-Les services systemd sont configurés pour démarrer automatiquement au boot (activés par `install.sh`, avec `Restart=always`). Toute interruption inattendue entraîne un redémarrage automatique du service concerné.
+1. [Service Management](#1-service-management)
+2. [Match Container Monitoring](#2-match-container-monitoring)
+3. [Health Check](#3-health-check)
+4. [Backup and Restore](#4-backup-and-restore)
+5. [Updates](#5-updates)
+6. [GSLT Token Management](#6-gslt-token-management)
+7. [Port Pool Management](#7-port-pool-management)
+8. [Database Administration](#8-database-administration)
+9. [Season Management](#9-season-management)
+10. [Logs and Debugging](#10-logs-and-debugging)
 
-### Démarrer tous les services
+---
+
+## 1. Service Management
+
+Systemd services are configured to start automatically on boot (enabled by `install.sh`, with `Restart=always`). Any unexpected interruption triggers an automatic restart of the affected service.
+
+### Start All Services
 
 ```bash
 sudo systemctl start csgo-lobby csgo-matchmaker csgo-webpanel
 ```
 
-### Arrêter tous les services
+### Stop All Services
 
 ```bash
 sudo systemctl stop csgo-lobby csgo-matchmaker csgo-webpanel
 ```
 
-### Redémarrer un service spécifique
+### Restart a Specific Service
 
 ```bash
 sudo systemctl restart csgo-matchmaker
 ```
 
-> Remplacer `csgo-matchmaker` par `csgo-lobby` ou `csgo-webpanel` selon le service concerné.
+> Replace `csgo-matchmaker` with `csgo-lobby` or `csgo-webpanel` as needed.
 
-### Vérifier le statut d'un service
+### Check Service Status
 
 ```bash
 sudo systemctl status csgo-matchmaker
 ```
 
-### Consulter les logs en temps réel
+### View Live Logs
 
 ```bash
 sudo journalctl -u csgo-matchmaker -f
 ```
 
-### Consulter les logs récents
+### View Recent Logs
 
 ```bash
 sudo journalctl -u csgo-matchmaker --since "1 hour ago"
@@ -63,60 +63,60 @@ sudo journalctl -u csgo-matchmaker --since "1 hour ago"
 
 ---
 
-## 2. Surveillance des conteneurs match
+## 2. Match Container Monitoring
 
-Chaque partie active est exécutée dans un conteneur Docker dédié, nommé selon le schéma `csgo-match-<ID>`.
+Each active match runs in a dedicated Docker container, named according to the scheme `csgo-match-<ID>`.
 
-### Lister les conteneurs actifs
+### List Active Containers
 
 ```bash
 docker ps --filter "name=csgo-match-"
 ```
 
-### Afficher les logs d'un conteneur
+### Display Container Logs
 
 ```bash
 docker logs csgo-match-<ID>
 ```
 
-### Lister tous les conteneurs match (y compris arrêtés)
+### List All Match Containers (Including Stopped)
 
 ```bash
 docker ps -a --filter "name=csgo-match-"
 ```
 
-### Arrêter un conteneur bloqué
+### Stop a Stuck Container
 
 ```bash
 docker stop csgo-match-<ID>
 ```
 
-> Remplacer `<ID>` par l'identifiant de la partie correspondante (visible dans la colonne `NAMES` de `docker ps`).
+> Replace `<ID>` with the match identifier (visible in the `NAMES` column of `docker ps`).
 
 ---
 
-## 3. Health check
+## 3. Health Check
 
-Le script `health_check.sh` effectue une vérification complète en 10 points de l'état du système.
+The `health_check.sh` script performs a comprehensive 10-point check of the system's state.
 
-### Vérification complète
+### Full Check
 
 ```bash
 ./scripts/health_check.sh
 ```
 
-Points vérifiés :
-- Connexion MySQL
-- Daemon Docker
-- Service matchmaker
-- Service lobby
-- Service webpanel
-- Espace disque disponible
-- Pool de tokens GSLT
-- Pool de ports
-- Partis bloqués (stale matches)
+Points checked:
+- MySQL connection
+- Docker daemon
+- Matchmaker service
+- Lobby service
+- Web panel service
+- Available disk space
+- GSLT token pool
+- Port pool
+- Stale matches (stuck)
 
-### Sortie JSON (pour Prometheus / Grafana)
+### JSON Output (for Prometheus / Grafana)
 
 ```bash
 ./scripts/health_check.sh --json
@@ -124,57 +124,57 @@ Points vérifiés :
 
 ---
 
-## 4. Backup et restauration
+## 4. Backup and Restore
 
-### Backup manuel
+### Manual Backup
 
 ```bash
 ./scripts/backup.sh
 ```
 
-Génère un dump MySQL horodaté dans le répertoire `./backups/`. Les 30 dernières sauvegardes sont conservées, les plus anciennes sont supprimées automatiquement.
+Generates a timestamped MySQL dump in the `./backups/` directory. The 30 most recent backups are kept; older ones are automatically deleted.
 
-### Restauration interactive
+### Interactive Restore
 
 ```bash
 ./scripts/restore.sh
 ```
 
-Le script est interactif : il arrête le matchmaker, restaure la base de données sélectionnée, puis redémarre le service.
+The script is interactive: it stops the matchmaker, restores the selected database backup, then restarts the service.
 
-### Backup automatique via cron
+### Automatic Backup via Cron
 
-Ajouter la ligne suivante dans la crontab (`crontab -e`) pour déclencher un backup chaque nuit à 3h00 :
+Add the following line to the crontab (`crontab -e`) to trigger a nightly backup at 3:00 AM:
 
 ```
 0 3 * * * /path/to/CSGO-Matchmaking/scripts/backup.sh
 ```
 
-> Remplacer `/path/to/CSGO-Matchmaking` par le chemin absolu du projet sur le serveur.
+> Replace `/path/to/CSGO-Matchmaking` with the absolute path to the project on your server.
 
 ---
 
-## 5. Mise à jour
+## 5. Updates
 
-### Mettre à jour le code et réinstaller
+### Update Code and Reinstall
 
 ```bash
 git pull && sudo ./install.sh --update
 ```
 
-### Mettre à jour uniquement les fichiers du jeu CS:GO
+### Update Only CS:GO Game Files
 
 ```bash
 ./scripts/update_server.sh
 ```
 
-### Reconstruire l'image Docker après modification du match-server
+### Rebuild Docker Image After Modifying Match-Server
 
 ```bash
 docker build -t csgo-match-server:latest -f match-server/Dockerfile match-server/
 ```
 
-### Redéployer les services Docker
+### Redeploy Docker Services
 
 ```bash
 docker compose up -d --build matchmaker webpanel
@@ -182,32 +182,32 @@ docker compose up -d --build matchmaker webpanel
 
 ---
 
-## 6. Gestion des tokens GSLT
+## 6. GSLT Token Management
 
-Les tokens GSLT (Game Server Login Token) sont nécessaires pour héberger des serveurs CS:GO officiels. Ils sont gérés via la table `mm_gslt_tokens`.
+GSLT (Game Server Login Token) tokens are required to host official CS:GO servers. They are managed via the `mm_gslt_tokens` table.
 
-### Vérifier l'état du pool
+### Check Pool Status
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "SELECT * FROM mm_gslt_tokens;"
 ```
 
-### Ajouter un nouveau token
+### Add a New Token
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "INSERT INTO mm_gslt_tokens (token) VALUES ('TOKEN');"
 ```
 
-> Remplacer `TOKEN` par le token GSLT obtenu sur [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers) (AppID 730).
+> Replace `TOKEN` with the GSLT obtained from [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers) (AppID 730).
 
-### Token expiré
+### Expired Token
 
-1. Régénérer le token sur [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers) (AppID 730).
-2. Mettre à jour le token en base de données.
+1. Regenerate the token at [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers) (AppID 730).
+2. Update the token in the database.
 
-### Libérer un token bloqué
+### Release a Stuck Token
 
-Si un token est marqué `in_use` alors qu'aucun conteneur correspondant n'existe :
+If a token is marked `in_use` but no corresponding container exists:
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "UPDATE mm_gslt_tokens SET in_use=0, assigned_match_id=NULL WHERE token='TOKEN';"
@@ -215,23 +215,23 @@ mysql -u csgo_mm -p csgo_matchmaking -e "UPDATE mm_gslt_tokens SET in_use=0, ass
 
 ---
 
-## 7. Gestion du pool de ports
+## 7. Port Pool Management
 
-Chaque serveur de match utilise un port UDP dédié. Le pool est géré dans la table `mm_server_ports`.
+Each match server uses a dedicated UDP port. The pool is managed in the `mm_server_ports` table.
 
-### Vérifier l'état du pool
+### Check Pool Status
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "SELECT * FROM mm_server_ports;"
 ```
 
-### Libérer un port bloqué
+### Release a Stuck Port
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "UPDATE mm_server_ports SET in_use=0 WHERE port=27020;"
 ```
 
-### Ajouter des ports supplémentaires
+### Add Additional Ports
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking -e "INSERT INTO mm_server_ports (port, tv_port) VALUES (27030, 27130);"
@@ -239,23 +239,23 @@ mysql -u csgo_mm -p csgo_matchmaking -e "INSERT INTO mm_server_ports (port, tv_p
 
 ---
 
-## 8. Administration base de données
+## 8. Database Administration
 
-### Connexion à la base de données
+### Connect to the Database
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking
 ```
 
-### Requêtes utiles
+### Useful Queries
 
-**Statut de la file d'attente :**
+**Queue status:**
 
 ```sql
 SELECT status, COUNT(*) FROM mm_queue GROUP BY status;
 ```
 
-**Parties actives :**
+**Active matches:**
 
 ```sql
 SELECT id, map_name, status, server_ip, server_port
@@ -263,7 +263,7 @@ FROM mm_matches
 WHERE status IN ('creating', 'warmup', 'live');
 ```
 
-**Classement des meilleurs joueurs :**
+**Top player rankings:**
 
 ```sql
 SELECT name, elo, rank_tier, matches_played
@@ -272,7 +272,7 @@ ORDER BY elo DESC
 LIMIT 10;
 ```
 
-**Bans actifs récents :**
+**Active bans:**
 
 ```sql
 SELECT steam_id, reason, expires_at
@@ -280,7 +280,7 @@ FROM mm_bans
 WHERE is_active = 1;
 ```
 
-**Nettoyage des anciennes entrées de file d'attente :**
+**Clean up old queue entries:**
 
 ```sql
 DELETE FROM mm_queue
@@ -290,23 +290,23 @@ WHERE status IN ('matched', 'expired', 'cancelled')
 
 ---
 
-## 9. Gestion des saisons
+## 9. Season Management
 
-### Démarrer une nouvelle saison (reset ELO partiel)
+### Start a New Season (Partial ELO Reset)
 
-Le script suivant clôture la saison en cours, crée une nouvelle saison et applique un reset ELO progressif (moyenne entre l'ELO actuel et 1000) avant de recalculer les rangs.
+The following script closes the current season, creates a new one, and applies a progressive ELO reset (average between current ELO and 1000) before recalculating ranks.
 
 ```sql
--- Clôturer la saison actuelle
+-- Close the current season
 UPDATE mm_seasons SET is_active = 0 WHERE is_active = 1;
 
--- Créer la nouvelle saison
-INSERT INTO mm_seasons (name, started_at, is_active) VALUES ('Saison 2', NOW(), 1);
+-- Create the new season
+INSERT INTO mm_seasons (name, started_at, is_active) VALUES ('Season 2', NOW(), 1);
 
--- Reset ELO partiel (moyenne entre ELO actuel et 1000)
+-- Partial ELO reset (average between current ELO and 1000)
 UPDATE mm_players SET elo = FLOOR((elo + 1000) / 2);
 
--- Recalculer les rangs en fonction du nouvel ELO
+-- Recalculate ranks based on new ELO
 UPDATE mm_players SET rank_tier = CASE
     WHEN elo >= 2100 THEN 17
     WHEN elo >= 1900 THEN 16
@@ -329,37 +329,37 @@ UPDATE mm_players SET rank_tier = CASE
 END;
 ```
 
-> Il est recommandé d'effectuer cette opération pendant une période de faible activité et de réaliser un backup préalable via `./scripts/backup.sh`.
+> It is recommended to perform this operation during a low-activity period and to take a backup first via `./scripts/backup.sh`.
 
 ---
 
-## 10. Logs et debugging
+## 10. Logs and Debugging
 
-### Filtrer les erreurs du matchmaker (dernière journée)
+### Filter Matchmaker Errors (Last 24 Hours)
 
 ```bash
 sudo journalctl -u csgo-matchmaker --since "1 day ago" | grep ERROR
 ```
 
-### Vérifier l'état du pare-feu
+### Check Firewall Status
 
 ```bash
 sudo ufw status
 ```
 
-ou, avec iptables :
+or, with iptables:
 
 ```bash
 sudo iptables -L
 ```
 
-### Vérifier qu'un port est en écoute
+### Check That a Port Is Listening
 
 ```bash
 ss -ulnp | grep 27015
 ```
 
-### Identifier les requêtes MySQL lentes ou bloquées
+### Identify Slow or Blocked MySQL Queries
 
 ```bash
 mysql -u root -p -e "SHOW PROCESSLIST;"
@@ -367,4 +367,4 @@ mysql -u root -p -e "SHOW PROCESSLIST;"
 
 ---
 
-*Documentation générée le 2026-03-05. Pour toute modification de l'infrastructure, mettre ce document à jour en conséquence.*
+*Documentation generated on 2026-03-05. Update this document whenever infrastructure changes are made.*

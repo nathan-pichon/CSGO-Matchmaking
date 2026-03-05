@@ -1,62 +1,62 @@
-# Guide d'utilisation — CS:GO Matchmaking
+# Usage Guide — CS:GO Matchmaking
 
-Ce document explique comment utiliser le système de matchmaking en tant que joueur, ainsi que les outils disponibles pour les administrateurs de serveur.
-
----
-
-## Table des matières
-
-1. [Rejoindre le lobby](#rejoindre-le-lobby)
-2. [Commandes joueur](#commandes-joueur)
-3. [Flux de matchmaking](#flux-de-matchmaking)
-4. [Phase de vérification (Ready Check)](#phase-de-vérification-ready-check)
-5. [Système de ranking ELO](#système-de-ranking-elo)
-6. [Commandes administrateur](#commandes-administrateur)
-7. [Panneau web](#panneau-web)
-8. [Gestion du lobby](#gestion-du-lobby)
+This document explains how to use the matchmaking system as a player, as well as the tools available to server administrators.
 
 ---
 
-## Rejoindre le lobby
+## Table of Contents
 
-Le lobby est le point d'entrée de toutes les parties. Connectez-vous via la console CS:GO :
+1. [Joining the Lobby](#joining-the-lobby)
+2. [Player Commands](#player-commands)
+3. [Matchmaking Flow](#matchmaking-flow)
+4. [Ready Check Phase](#ready-check-phase)
+5. [ELO Ranking System](#elo-ranking-system)
+6. [Admin Commands](#admin-commands)
+7. [Web Panel](#web-panel)
+8. [Lobby Management](#lobby-management)
+
+---
+
+## Joining the Lobby
+
+The lobby is the entry point for all matches. Connect via the CS:GO console:
 
 ```
 connect IP:27015
 ```
 
-Remplacez `IP` par l'adresse IP publique du serveur communiquée par votre administrateur.
+Replace `IP` with the public IP address of the server provided by your administrator.
 
-Une fois connecté au lobby, vous pouvez rejoindre la file d'attente et accéder à toutes les commandes de matchmaking depuis le chat en jeu.
+Once connected to the lobby, you can join the queue and access all matchmaking commands from the in-game chat.
 
 ---
 
-## Commandes joueur
+## Player Commands
 
-Toutes les commandes sont saisies dans le **chat en jeu** (touche `Y` par défaut). Un délai de **5 secondes** est appliqué entre chaque commande pour éviter les abus.
+All commands are entered in the **in-game chat** (default key `Y`). A **5-second** cooldown applies between each command use to prevent abuse.
 
-### File d'attente
+### Queue
 
-| Commande                 | Description |
+| Command                  | Description |
 |--------------------------|-------------|
-| `!queue` ou `!q`         | Rejoindre la file d'attente sans préférence de carte. Le matchmaker choisira la carte automatiquement parmi les cartes disponibles. |
-| `!queue <carte>`         | Rejoindre la file d'attente en exprimant une préférence pour une carte spécifique. Le système tentera de regrouper des joueurs ayant la même préférence. |
-| `!leave` ou `!unqueue`   | Quitter la file d'attente. Utilisez cette commande avant de vous déconnecter pour libérer votre place. |
-| `!status`                | Afficher votre statut actuel dans la file d'attente : position, temps d'attente écoulé et préférence de carte. |
+| `!queue` or `!q`         | Join the matchmaking queue with no map preference. The matchmaker will automatically select a map from the available pool. |
+| `!queue <map>`           | Join the queue expressing a preference for a specific map. The system will attempt to group players with the same preference. |
+| `!leave` or `!unqueue`   | Leave the matchmaking queue. Use this command before disconnecting to free up your slot. |
+| `!status`                | Display your current queue status: position, elapsed wait time, and map preference. |
 
-**Cartes disponibles :**
+**Available Maps:**
 
-| Identifiant      | Carte       |
-|------------------|-------------|
-| `de_dust2`       | Dust II     |
-| `de_mirage`      | Mirage      |
-| `de_inferno`     | Inferno     |
-| `de_ancient`     | Ancient     |
-| `de_nuke`        | Nuke        |
-| `de_overpass`    | Overpass    |
-| `de_vertigo`     | Vertigo     |
+| Identifier    | Map      |
+|---------------|----------|
+| `de_dust2`    | Dust II  |
+| `de_mirage`   | Mirage   |
+| `de_inferno`  | Inferno  |
+| `de_ancient`  | Ancient  |
+| `de_nuke`     | Nuke     |
+| `de_overpass` | Overpass |
+| `de_vertigo`  | Vertigo  |
 
-**Exemples :**
+**Examples:**
 
 ```
 !queue de_mirage
@@ -65,150 +65,150 @@ Toutes les commandes sont saisies dans le **chat en jeu** (touche `Y` par défau
 !leave
 ```
 
-### Statistiques et classement
+### Stats and Rankings
 
-| Commande  | Description |
-|-----------|-------------|
-| `!rank`   | Afficher votre rang actuel, votre score ELO, votre ratio victoires/défaites (W/L) et votre ratio kills/morts (K/D). |
-| `!top`    | Afficher le classement des 10 meilleurs joueurs du serveur, triés par ELO décroissant. |
-| `!stats`  | Afficher vos statistiques détaillées : kills totaux, morts, assistances, headshots, série de victoires en cours, meilleure série, taux de victoire et pourcentage de headshots. |
+| Command  | Description |
+|----------|-------------|
+| `!rank`  | Display your current rank, ELO score, win/loss ratio (W/L), and kill/death ratio (K/D). |
+| `!top`   | Display the top 10 players on the server, sorted by ELO in descending order. |
+| `!stats` | Display your detailed statistics: total kills, deaths, assists, headshots, current win streak, best streak, win rate, and headshot percentage. |
 
-**Exemple de sortie `!rank` :**
-
-```
-[MM] VotreNom | Rang : Master Guardian I | ELO : 1042 | W/L : 18/12 | K/D : 1.24
-```
-
-**Exemple de sortie `!stats` :**
+**Example `!rank` output:**
 
 ```
-[MM] VotreNom | Kills : 412 | Morts : 332 | Assistances : 87
-     Headshots : 198 (48%) | Série actuelle : 3W | Meilleure série : 7W
-     Taux de victoire : 60% | Parties jouées : 30
+[MM] YourName | Rank: Master Guardian I | ELO: 1042 | W/L: 18/12 | K/D: 1.24
+```
+
+**Example `!stats` output:**
+
+```
+[MM] YourName | Kills: 412 | Deaths: 332 | Assists: 87
+     Headshots: 198 (48%) | Current Streak: 3W | Best Streak: 7W
+     Win Rate: 60% | Matches Played: 30
 ```
 
 ---
 
-## Flux de matchmaking
+## Matchmaking Flow
 
-Voici le déroulement complet d'une partie, de l'entrée en file d'attente à la fin du match.
+Here is the complete flow of a match, from entering the queue to the end of the game.
 
 ```
-Joueur → connect IP:27015
+Player → connect IP:27015
          ↓
-    Lobby CS:GO
+    CS:GO Lobby
          ↓
-    !queue [carte]
+    !queue [map]
          ↓
-    File d'attente (mm_queue)
+    Queue (mm_queue)
          ↓
-    Matchmaker trouve 10 joueurs compatibles en ELO
+    Matchmaker finds 10 ELO-compatible players
          ↓
-    Phase de vérification — Ready Check (30 secondes)
+    Ready Check phase (30 seconds)
          ↓
-    Tous acceptent
+    All players accept
          ↓
-    Lancement d'un conteneur Docker (serveur de match dédié)
+    Docker container launched (dedicated match server)
          ↓
-    Connexion automatique des 10 joueurs au serveur de match
+    All 10 players automatically connected to match server
          ↓
-    Partie compétitive 5v5 (MR30, overtime activé)
+    Competitive 5v5 match (MR30, overtime enabled)
          ↓
-    Fin de partie → Sauvegarde des stats et calcul ELO
+    Match ends → Stats saved and ELO calculated
          ↓
-    Compte à rebours 15 secondes
+    15-second countdown
          ↓
-    Redirection automatique vers le lobby
+    Automatic redirect back to lobby
 ```
 
-**Détails de la formation des équipes :**
+**Team formation details:**
 
-Les équipes sont composées via un **snake draft** basé sur l'ELO :
-- Les 10 joueurs sont triés par ELO décroissant.
-- Le joueur 1 va en équipe A, le 2 en B, le 3 en B, le 4 en A, le 5 en A, et ainsi de suite.
-- Ce système assure une répartition équilibrée des niveaux entre les deux équipes.
+Teams are composed via an **ELO-based snake draft**:
+- The 10 players are sorted by ELO in descending order.
+- Player 1 goes to Team A, player 2 to Team B, player 3 to Team B, player 4 to Team A, player 5 to Team A, and so on.
+- This system ensures a balanced distribution of skill levels between both teams.
 
 ---
 
-## Phase de vérification (Ready Check)
+## Ready Check Phase
 
-Lorsque le matchmaker a trouvé 10 joueurs compatibles, une **fenêtre de confirmation** apparaît sur l'écran de chaque joueur.
+When the matchmaker has found 10 compatible players, a **confirmation window** appears on each player's screen.
 
-- La fenêtre indique : la carte sélectionnée et un compte à rebours de **30 secondes**.
-- Cliquez sur **ACCEPTER** pour confirmer votre participation.
-- Si vous cliquez sur **REFUSER** ou si le délai expire sans réponse :
-  - Vous recevez un **ban temporaire de 5 minutes** de la file d'attente.
-  - Les autres joueurs qui avaient accepté sont renvoyés en file d'attente automatiquement.
+- The window shows: the selected map and a **30-second** countdown.
+- Click **ACCEPT** to confirm your participation.
+- If you click **DECLINE** or the timer expires without a response:
+  - You receive a **5-minute temporary ban** from the queue.
+  - Other players who had accepted are automatically returned to the queue.
 
-> Si vous devez vous absenter brièvement, utilisez `!leave` avant que le ready check se déclenche pour éviter le ban.
+> If you need to step away briefly, use `!leave` before the ready check triggers to avoid a ban.
 
 ---
 
-## Système de ranking ELO
+## ELO Ranking System
 
-### Démarrage
+### Starting Out
 
-Tout nouveau joueur commence avec un ELO de **1000** (Master Guardian I).
+Every new player starts with an ELO of **1000** (Master Guardian I).
 
-### Paliers
+### Tiers
 
-| Palier | Rang                          | Plage ELO   |
-|--------|-------------------------------|-------------|
-| 1      | Silver I                      | 0 – 99      |
-| 2      | Silver II                     | 100 – 199   |
-| 3      | Silver III                    | 200 – 299   |
-| 4      | Silver IV                     | 300 – 399   |
-| 5      | Silver Elite                  | 400 – 499   |
-| 6      | Silver Elite Master           | 500 – 599   |
-| 7      | Gold Nova I                   | 600 – 699   |
-| 8      | Gold Nova II                  | 700 – 799   |
-| 9      | Gold Nova III                 | 800 – 899   |
-| 10     | Gold Nova Master              | 900 – 999   |
-| 11     | Master Guardian I             | 1000 – 1099 |
-| 12     | Master Guardian II            | 1100 – 1199 |
-| 13     | Master Guardian Elite         | 1200 – 1299 |
-| 14     | Distinguished Master Guardian | 1300 – 1499 |
-| 15     | Legendary Eagle               | 1500 – 1699 |
-| 16     | Legendary Eagle Master        | 1700 – 1899 |
-| 17     | Supreme Master First Class    | 1900 – 2099 |
-| 18     | Global Elite                  | 2100 +      |
+| Tier | Rank                          | ELO Range   |
+|------|-------------------------------|-------------|
+| 1    | Silver I                      | 0 – 99      |
+| 2    | Silver II                     | 100 – 199   |
+| 3    | Silver III                    | 200 – 299   |
+| 4    | Silver IV                     | 300 – 399   |
+| 5    | Silver Elite                  | 400 – 499   |
+| 6    | Silver Elite Master           | 500 – 599   |
+| 7    | Gold Nova I                   | 600 – 699   |
+| 8    | Gold Nova II                  | 700 – 799   |
+| 9    | Gold Nova III                 | 800 – 899   |
+| 10   | Gold Nova Master              | 900 – 999   |
+| 11   | Master Guardian I             | 1000 – 1099 |
+| 12   | Master Guardian II            | 1100 – 1199 |
+| 13   | Master Guardian Elite         | 1200 – 1299 |
+| 14   | Distinguished Master Guardian | 1300 – 1499 |
+| 15   | Legendary Eagle               | 1500 – 1699 |
+| 16   | Legendary Eagle Master        | 1700 – 1899 |
+| 17   | Supreme Master First Class    | 1900 – 2099 |
+| 18   | Global Elite                  | 2100+       |
 
-### Facteur K
+### K-Factor
 
-Le gain ou la perte d'ELO par partie dépend du **facteur K** appliqué à votre profil :
+ELO gains and losses per match depend on the **K-factor** applied to your profile:
 
-| Situation                                        | Facteur K | Effet |
-|--------------------------------------------------|-----------|-------|
-| Parties de placement (< 10 parties jouées)       | **64**    | Variations importantes pour un positionnement rapide |
-| Joueur établi (10 à 30 parties)                  | **32**    | Variations standard |
-| Joueur vétéran (> 30 parties)                    | **24**    | Variations réduites pour une plus grande stabilité |
+| Situation                                     | K-Factor | Effect |
+|-----------------------------------------------|----------|--------|
+| Placement matches (< 10 matches played)       | **64**   | Large swings for fast positioning |
+| Established player (10 to 30 matches)         | **32**   | Standard swings |
+| Veteran player (> 30 matches)                 | **24**   | Reduced swings for greater stability |
 
 ### Progression
 
-- La **victoire** rapporte des points ELO, la **défaite** en retire.
-- Le nombre de points gagnés ou perdus dépend de l'écart d'ELO entre les deux équipes : battre une équipe plus forte rapporte davantage.
-- Les performances individuelles (kills, headshots) n'influencent pas directement l'ELO — seul le résultat de la partie compte.
+- **Winning** earns ELO, **losing** costs ELO.
+- The number of points gained or lost depends on the ELO gap between the two teams: beating a stronger team earns more.
+- Individual performance (kills, headshots) does not directly influence ELO — only the match result matters.
 
 ---
 
-## Commandes administrateur
+## Admin Commands
 
-Les commandes administrateur nécessitent le drapeau **ADMFLAG_ROOT** (accès root SourceMod). Elles sont saisies dans le chat en jeu avec le préfixe `!`.
+Admin commands require the **ADMFLAG_ROOT** flag (SourceMod root access). They are entered in the in-game chat with the `!` prefix.
 
-| Commande                                          | Description |
-|---------------------------------------------------|-------------|
-| `!mm_forcestart`                                  | Forcer le lancement d'une partie avec les joueurs actuellement en file d'attente. Requiert un minimum de **2 joueurs**. Utile pour les tests. |
-| `!mm_cancelqueue`                                 | Annuler toutes les entrées en attente dans la file d'attente et renvoyer les joueurs à l'état disponible. |
-| `!mm_ban <#userid\|nom> <minutes> <raison>`       | Bannir un joueur de la file de matchmaking pour une durée définie en minutes. Utilisez `#userid` (ex. `#42`) ou le nom du joueur. |
-| `!mm_unban <STEAM_X:Y:Z>`                         | Lever le ban d'un joueur identifié par son SteamID (format `STEAM_0:1:12345678`). |
-| `!mm_setelo <#userid\|nom> <elo>`                 | Définir manuellement l'ELO d'un joueur. La valeur doit être comprise entre **0 et 9999**. |
-| `!mm_resetrank <#userid\|nom>`                    | Remettre l'ELO d'un joueur à la valeur par défaut (**1000**) et réinitialiser son compteur de parties de placement. |
-| `!mm_status`                                      | Afficher un résumé en temps réel : nombre de parties actives, nombre de joueurs en file d'attente par statut, et liste des serveurs de match en cours. |
+| Command                                          | Description |
+|--------------------------------------------------|-------------|
+| `!mm_forcestart`                                 | Force-start a match with players currently in the queue. Requires a minimum of **2 players**. Useful for testing. |
+| `!mm_cancelqueue`                                | Cancel all waiting queue entries and return players to available status. |
+| `!mm_ban <#userid\|name> <minutes> <reason>`     | Ban a player from the matchmaking queue for a set duration in minutes. Use `#userid` (e.g. `#42`) or the player's name. |
+| `!mm_unban <STEAM_X:Y:Z>`                        | Lift a ban for a player identified by their SteamID (format `STEAM_0:1:12345678`). |
+| `!mm_setelo <#userid\|name> <elo>`               | Manually set a player's ELO. The value must be between **0 and 9999**. |
+| `!mm_resetrank <#userid\|name>`                  | Reset a player's ELO to the default value (**1000**) and reset their placement match counter. |
+| `!mm_status`                                     | Display a real-time summary: number of active matches, number of players in queue by status, and list of ongoing match servers. |
 
-**Exemples d'utilisation :**
+**Usage examples:**
 
 ```
-!mm_ban #42 30 Comportement toxique
+!mm_ban #42 30 Toxic behaviour
 !mm_unban STEAM_0:1:12345678
 !mm_setelo TopFragger 1800
 !mm_resetrank #7
@@ -216,35 +216,35 @@ Les commandes administrateur nécessitent le drapeau **ADMFLAG_ROOT** (accès ro
 !mm_status
 ```
 
-> Les commandes admin sont enregistrées dans les logs SourceMod avec l'identité de l'administrateur ayant agi.
+> Admin commands are logged in the SourceMod logs with the identity of the acting administrator.
 
 ---
 
-## Panneau web
+## Web Panel
 
-Le panneau web est accessible à l'adresse `http://IP:5000` (remplacez `IP` par l'adresse du serveur).
+The web panel is accessible at `http://IP:5000` (replace `IP` with the server address).
 
-### Pages disponibles
+### Available Pages
 
-| URL                        | Description |
-|----------------------------|-------------|
-| `/leaderboard`             | Classement paginé de tous les joueurs, trié par ELO décroissant. Filtrable par saison. |
-| `/player/<steam_id>`       | Profil complet d'un joueur : graphique d'évolution de l'ELO dans le temps, historique des parties récentes, statistiques détaillées. |
-| `/matches`                 | Liste des parties récentes avec date, carte, scores et durée. |
-| `/match/<id>`              | Tableau de bord complet d'une partie : K/D/A, headshots, MVP, variation d'ELO pour chaque joueur. |
+| URL                       | Description |
+|---------------------------|-------------|
+| `/leaderboard`            | Paginated leaderboard of all players, sorted by ELO in descending order. Filterable by season. |
+| `/player/<steam_id>`      | Full player profile: ELO history chart, recent match history, detailed statistics. |
+| `/matches`                | List of recent matches with date, map, scores, and duration. |
+| `/match/<id>`             | Complete match dashboard: K/D/A, headshots, MVP, ELO change for each player. |
 
-### API REST
+### REST API
 
-Des endpoints JSON sont disponibles pour intégrer les données dans des outils externes (bots Discord, sites web, dashboards) :
+JSON endpoints are available for integrating data into external tools (Discord bots, websites, dashboards):
 
 | Endpoint                   | Description |
 |----------------------------|-------------|
-| `GET /api/queue/count`     | Retourne le nombre de joueurs actuellement en file d'attente. |
-| `GET /api/player/<id>`     | Retourne le profil JSON d'un joueur (ELO, rang, statistiques). |
-| `GET /api/leaderboard`     | Retourne le classement complet au format JSON. Paramètre optionnel : `?season=N`. |
-| `GET /api/matches`         | Retourne la liste des parties récentes au format JSON. |
+| `GET /api/queue/count`     | Returns the current number of players in the queue. |
+| `GET /api/player/<id>`     | Returns a player's JSON profile (ELO, rank, statistics). |
+| `GET /api/leaderboard`     | Returns the full leaderboard in JSON format. Optional parameter: `?season=N`. |
+| `GET /api/matches`         | Returns the list of recent matches in JSON format. |
 
-**Exemple de réponse `/api/queue/count` :**
+**Example `/api/queue/count` response:**
 
 ```json
 {
@@ -253,7 +253,7 @@ Des endpoints JSON sont disponibles pour intégrer les données dans des outils 
 }
 ```
 
-**Exemple de réponse `/api/player/<id>` :**
+**Example `/api/player/<id>` response:**
 
 ```json
 {
@@ -270,35 +270,35 @@ Des endpoints JSON sont disponibles pour intégrer les données dans des outils 
 
 ---
 
-## Gestion du lobby
+## Lobby Management
 
-Cette section s'adresse aux opérateurs de serveur.
+This section is intended for server operators.
 
-### Détection AFK
+### AFK Detection
 
-- Un joueur resté en **spectateur pendant 5 minutes consécutives** est automatiquement retiré de la file d'attente.
-- Il reçoit un message de notification dans le chat lui indiquant qu'il a été sorti de la queue.
-- Il peut se remettre en file d'attente en tapant `!queue` dès qu'il rejoint une équipe ou interagit avec le serveur.
+- A player who remains in **spectator for 5 consecutive minutes** is automatically removed from the queue.
+- They receive a chat notification telling them they have been removed from the queue.
+- They can re-queue by typing `!queue` once they join a team or interact with the server.
 
-### Expiration de la file d'attente
+### Queue Expiry
 
-- Une entrée en file d'attente expire automatiquement après **15 minutes** sans qu'une partie ait pu être formée.
-- Le joueur est notifié par un message chat et doit taper `!queue` pour se remettre en attente.
-- Ce mécanisme évite les entrées orphelines en base de données lors de déconnexions silencieuses.
+- A queue entry automatically expires after **15 minutes** if no match could be formed.
+- The player is notified via chat and must type `!queue` to rejoin the queue.
+- This mechanism prevents orphaned database entries during silent disconnections.
 
-### Messages de broadcast automatiques
+### Automatic Broadcast Messages
 
-- Toutes les **2 minutes**, le serveur de lobby envoie un message broadcast à tous les joueurs connectés indiquant le nombre de joueurs actuellement en file d'attente.
+- Every **2 minutes**, the lobby server sends a broadcast message to all connected players showing the current number of players in queue.
 
-Exemple :
+Example:
 
 ```
-[MM] 6 joueur(s) en file d'attente. Tapez !queue pour rejoindre !
+[MM] 6 player(s) in queue! Type !queue to join!
 ```
 
-### Bonnes pratiques pour les opérateurs
+### Best Practices for Operators
 
-- Surveillez régulièrement les logs du matchmaker (`matchmaker/logs/`) pour détecter les erreurs de lancement de conteneurs.
-- Utilisez `!mm_status` en jeu pour vérifier l'état général du système sans accéder au serveur.
-- En cas de partie bloquée (serveur de match inaccessible), annulez manuellement la partie via l'interface Docker (`docker ps` / `docker stop <container>`) puis videz la queue avec `!mm_cancelqueue`.
-- Planifiez les redémarrages du lobby en dehors des heures de pointe pour éviter d'interrompre des parties en cours.
+- Regularly monitor matchmaker logs (`matchmaker/logs/`) to detect container launch errors.
+- Use `!mm_status` in-game to check the overall system status without accessing the server.
+- If a match is stuck (match server unreachable), manually cancel the match via the Docker interface (`docker ps` / `docker stop <container>`) then clear the queue with `!mm_cancelqueue`.
+- Schedule lobby restarts during off-peak hours to avoid interrupting ongoing matches.

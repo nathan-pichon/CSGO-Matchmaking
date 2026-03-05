@@ -1,376 +1,376 @@
-# Guide d'Installation
+# Installation Guide
 
-Ce guide couvre l'installation complète du système de matchmaking CS:GO Legacy de zéro, jusqu'à un serveur fonctionnel prêt à accueillir des joueurs.
-
----
-
-## Sommaire
-
-1. [Prérequis](#1-prérequis)
-2. [Obtenir les tokens GSLT](#2-obtenir-les-tokens-gslt)
-3. [Installation automatique (recommandée)](#3-installation-automatique-recommandée)
-4. [Vérification post-installation](#4-vérification-post-installation)
-5. [Premiers tests](#5-premiers-tests)
-6. [Dépannage](#6-dépannage)
+This guide covers the complete installation of the CS:GO Legacy Matchmaking system from scratch, up to a fully operational server ready to accept players.
 
 ---
 
-## 1. Prérequis
+## Table of Contents
 
-### Matériel minimum
+1. [Prerequisites](#1-prerequisites)
+2. [Obtaining GSLT Tokens](#2-obtaining-gslt-tokens)
+3. [Automated Installation (Recommended)](#3-automated-installation-recommended)
+4. [Post-Installation Verification](#4-post-installation-verification)
+5. [First Tests](#5-first-tests)
+6. [Troubleshooting](#6-troubleshooting)
 
-| Ressource | Minimum | Recommandé |
-|-----------|---------|------------|
-| RAM | 4 Go | 8 Go+ |
-| CPU | 2 cœurs | 4 cœurs |
-| Disque | 50 Go | 100 Go |
+---
+
+## 1. Prerequisites
+
+### Minimum Hardware
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 4 GB | 8 GB+ |
+| CPU | 2 cores | 4 cores |
+| Disk | 50 GB | 100 GB |
 | OS | Linux 64-bit | Ubuntu 22.04 LTS |
-| Réseau | 100 Mbit/s | 1 Gbit/s dédié |
+| Network | 100 Mbit/s | 1 Gbit/s dedicated |
 
-> **Conseil** : CS:GO seul occupe ~25 Go. Chaque serveur match actif consomme ~500 Mo RAM et ~200 Mo disque supplémentaires.
+> **Tip**: CS:GO alone takes up ~25 GB. Each active match server consumes an additional ~500 MB RAM and ~200 MB disk.
 
-### Distributions supportées
+### Supported Distributions
 
-- **Ubuntu** 20.04, 22.04, 24.04 (LTS, recommandées)
+- **Ubuntu** 20.04, 22.04, 24.04 (LTS, recommended)
 - **Debian** 11 (Bullseye), 12 (Bookworm)
 - **CentOS** 7, Stream 8/9
 - **Rocky Linux / AlmaLinux** 8, 9
 - **Fedora** 36+
 - **Arch Linux** (rolling)
 
-### Compte Steam requis
+### Required Steam Account
 
-- Un compte Steam **avec jeu CS:GO** (nécessaire pour obtenir des GSLT)
-- Accès internet pendant l'installation (téléchargement ~25 Go)
-- Accès `root` ou `sudo` sur le serveur
-
----
-
-## 2. Obtenir les tokens GSLT
-
-Les **Game Server Login Tokens (GSLT)** sont obligatoires pour faire tourner des serveurs CS:GO visibles sur internet. Chaque instance de serveur (lobby + chaque serveur match) nécessite un token unique.
-
-> **Important** : L'AppID pour CS:GO Legacy est **730** (et non 730 pour CS2). Utiliser le mauvais AppID invalide les tokens.
-
-### Procédure
-
-1. Aller sur [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers)
-2. Se connecter avec votre compte Steam
-3. Dans le champ **App ID**, entrer : `730`
-4. Dans **Memo**, entrer un nom descriptif (ex: `csgo-lobby`, `csgo-match-01`)
-5. Cliquer **Create**
-6. Copier le token généré (format : `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`, 32 caractères)
-7. **Répéter** pour chaque serveur :
-   - 1 token pour le serveur lobby
-   - 1 token par slot match (le système supporte 10 matchs simultanés par défaut, donc 10 tokens)
-
-**Total recommandé : 11 tokens** (1 lobby + 10 matchs)
-
-> **Note** : Un compte Steam peut créer jusqu'à 1000 tokens. Les tokens expirés ou révoqués peuvent être regénérés depuis la même page.
-
-### Vérifier un token
-
-Un token valide ressemble à : `A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4`
-
-L'installateur validera automatiquement le format de chaque token saisi.
+- A Steam account **with CS:GO** (required to obtain GSLTs)
+- Internet access during installation (downloads ~25 GB)
+- `root` or `sudo` access on the server
 
 ---
 
-## 3. Installation automatique (recommandée)
+## 2. Obtaining GSLT Tokens
 
-### Étape 1 : Cloner le dépôt
+**Game Server Login Tokens (GSLT)** are mandatory to run CS:GO servers visible on the internet. Each server instance (lobby + each match server) requires a unique token.
+
+> **Important**: The AppID for CS:GO Legacy is **730**. Using the wrong AppID will invalidate the tokens.
+
+### Procedure
+
+1. Go to [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers)
+2. Sign in with your Steam account
+3. In the **App ID** field, enter: `730`
+4. In **Memo**, enter a descriptive name (e.g. `csgo-lobby`, `csgo-match-01`)
+5. Click **Create**
+6. Copy the generated token (format: `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`, 32 characters)
+7. **Repeat** for each server:
+   - 1 token for the lobby server
+   - 1 token per match slot (the system supports 10 simultaneous matches by default, so 10 tokens)
+
+**Recommended total: 11 tokens** (1 lobby + 10 matches)
+
+> **Note**: A Steam account can create up to 1000 tokens. Expired or revoked tokens can be regenerated from the same page.
+
+### Validating a Token
+
+A valid token looks like: `A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4`
+
+The installer will automatically validate the format of each token entered.
+
+---
+
+## 3. Automated Installation (Recommended)
+
+### Step 1: Clone the Repository
 
 ```bash
 git clone https://github.com/nathan-pichon/CSGO-Matchmaking.git
 cd CSGO-Matchmaking
 ```
 
-### Étape 2 : Lancer le wizard
+### Step 2: Run the Wizard
 
 ```bash
 chmod +x install.sh
 sudo ./install.sh
 ```
 
-> **Durée estimée** : 30 à 60 minutes (dépend de la vitesse de connexion pour le téléchargement de CS:GO ~25 Go)
+> **Estimated duration**: 30 to 60 minutes (depends on connection speed for the ~25 GB CS:GO download)
 
-### Ce que fait le wizard
+### What the Wizard Does
 
-Le wizard est interactif et vous guide à travers chaque étape :
+The wizard is interactive and guides you through each step:
 
-#### Détection de l'environnement
-- Identifie automatiquement votre distribution Linux et son gestionnaire de paquets
-- Vérifie que les ressources système sont suffisantes (RAM, CPU, disque)
-- Détecte l'adresse IP publique de votre serveur (avec possibilité de confirmer ou corriger)
+#### Environment Detection
+- Automatically identifies your Linux distribution and package manager
+- Checks that system resources are sufficient (RAM, CPU, disk)
+- Detects your server's public IP address (with the option to confirm or correct it)
 
-#### Installation des dépendances
-Installe automatiquement selon votre distro :
-- **Docker CE** et **docker-compose** (ou Docker Compose V2)
-- **MySQL 8.0** ou **MariaDB**
-- **Python 3.10+** et `pip`
-- **SteamCMD** (client Steam en ligne de commande)
-- Outils système requis (curl, wget, git, etc.)
+#### Dependency Installation
+Automatically installs based on your distro:
+- **Docker CE** and **docker-compose** (or Docker Compose V2)
+- **MySQL 8.0** or **MariaDB**
+- **Python 3.10+** and `pip`
+- **SteamCMD** (Steam command-line client)
+- Required system tools (curl, wget, git, etc.)
 
-#### Configuration interactive
+#### Interactive Configuration
 
-Le wizard vous pose les questions suivantes :
+The wizard asks the following questions:
 
-| Question | Valeur par défaut | Description |
-|----------|-------------------|-------------|
-| Adresse IP publique | Auto-détectée | IP que les joueurs utilisent pour se connecter |
-| Port du lobby | `27015` | Port UDP du serveur lobby |
-| Mot de passe MySQL | Généré aléatoirement | Mot de passe pour l'utilisateur `csgo_mm` |
-| Mot de passe RCON | Généré aléatoirement | Pour la communication entre le daemon et les serveurs |
-| Token GSLT lobby | — | Token pour le serveur lobby (obligatoire) |
-| Tokens GSLT matchs | — | Un token par slot match (10 slots, saisie guidée) |
-| URL Discord webhook | Vide (désactivé) | Optionnel pour les notifications Discord |
-| Pool de maps | `de_mirage,de_dust2,de_inferno,de_ancient,de_nuke,de_overpass,de_vertigo` | Maps actives en rotation |
+| Question | Default Value | Description |
+|----------|---------------|-------------|
+| Public IP address | Auto-detected | IP players use to connect |
+| Lobby port | `27015` | Lobby server UDP port |
+| MySQL password | Randomly generated | Password for the `csgo_mm` user |
+| RCON password | Randomly generated | For communication between the daemon and servers |
+| Lobby GSLT token | — | Token for the lobby server (required) |
+| Match GSLT tokens | — | One token per match slot (10 slots, guided entry) |
+| Discord webhook URL | Empty (disabled) | Optional for Discord notifications |
+| Map pool | `de_mirage,de_dust2,de_inferno,de_ancient,de_nuke,de_overpass,de_vertigo` | Active maps in rotation |
 
-#### Téléchargements et installation
-- Télécharge CS:GO Legacy via SteamCMD (~25 Go)
-- Télécharge et installe SourceMod + MetaMod:Source
-- Installe les plugins additionnels : **Levels Ranks** et **ServerRedirect** (GAMMACASE)
-- Copie les plugins compilés (`.smx`) depuis le dépôt vers les dossiers SourceMod
-- Configure les fichiers `databases.cfg` pour la connexion MySQL
+#### Downloads and Installation
+- Downloads CS:GO Legacy via SteamCMD (~25 GB)
+- Downloads and installs SourceMod + MetaMod:Source
+- Installs additional plugins: **Levels Ranks** and **ServerRedirect** (GAMMACASE)
+- Copies compiled plugins (`.smx`) from the repository to SourceMod folders
+- Configures `databases.cfg` files for MySQL connection
 
-#### Base de données
-- Crée la base de données `csgo_matchmaking`
-- Crée l'utilisateur MySQL `csgo_mm` avec les permissions appropriées
-- Applique le schéma complet (`database/schema.sql`) — idempotent, peut être relancé
-- Seed les données initiales : Saison 1, pool de maps, pool de ports (27020–27029)
+#### Database
+- Creates the `csgo_matchmaking` database
+- Creates the `csgo_mm` MySQL user with appropriate permissions
+- Applies the complete schema (`database/schema.sql`) — idempotent, can be re-run
+- Seeds initial data: Season 1, map pool, port pool (27020–27029)
 
-#### Génération des fichiers de config
-- Génère `config.env` avec toutes vos valeurs
-- Génère les fichiers de config SourceMod (`databases.cfg`, `csgo_matchmaking.cfg`)
+#### Config File Generation
+- Generates `config.env` with all your values
+- Generates SourceMod config files (`databases.cfg`, `csgo_matchmaking.cfg`)
 
-#### Construction Docker
-- Construit l'image Docker des serveurs match : `csgo-match-server:latest`
-- Vérifie que l'image est accessible
+#### Docker Build
+- Builds the Docker image for match servers: `csgo-match-server:latest`
+- Verifies the image is accessible
 
-#### Services systemd
-Crée et active 3 services qui démarrent automatiquement au boot :
+#### Systemd Services
+Creates and enables 3 services that start automatically on boot:
 
 ```
-csgo-lobby.service      # Serveur lobby CS:GO (srcds)
-csgo-matchmaker.service # Daemon Python de matchmaking
-csgo-webpanel.service   # Interface web Flask
+csgo-lobby.service      # CS:GO lobby server (srcds)
+csgo-matchmaker.service # Python matchmaking daemon
+csgo-webpanel.service   # Flask web interface
 ```
 
-#### Validation finale
-Teste automatiquement :
-- Connexion à MySQL
-- Accès à l'API Docker
-- Disponibilité des ports (27015, 5000)
-- Démarrage des services
+#### Final Validation
+Automatically tests:
+- MySQL connection
+- Docker API access
+- Port availability (27015, 5000)
+- Service startup
 
-### Rejouer le wizard (mise à jour)
+### Re-running the Wizard (Update)
 
 ```bash
 sudo ./install.sh --update
 ```
 
-Le mode `--update` relance uniquement les étapes nécessaires sans écraser votre `config.env` existant.
+The `--update` mode re-runs only the necessary steps without overwriting your existing `config.env`.
 
 ---
 
-## 4. Vérification post-installation
+## 4. Post-Installation Verification
 
-### Vérifier les services
+### Check Services
 
 ```bash
-# Statut de tous les services
+# Status of all services
 sudo systemctl status csgo-lobby csgo-matchmaker csgo-webpanel
 
-# Voir les logs en direct
+# View live logs
 sudo journalctl -u csgo-matchmaker -f
 sudo journalctl -u csgo-lobby -f
 sudo journalctl -u csgo-webpanel -f
 ```
 
-### Vérifier la base de données
+### Check the Database
 
 ```bash
 mysql -u csgo_mm -p csgo_matchmaking
 
-# Dans MySQL :
+# In MySQL:
 SHOW TABLES;
 SELECT * FROM mm_seasons;
 SELECT * FROM mm_server_ports;
 SELECT COUNT(*) FROM mm_gslt_tokens;
 ```
 
-### Vérifier Docker
+### Check Docker
 
 ```bash
-# L'image doit être présente
+# The image should be present
 docker images | grep csgo-match-server
 
-# Aucun conteneur match ne devrait tourner pour l'instant
+# No match containers should be running yet
 docker ps --filter "name=csgo-match-"
 ```
 
-### Vérifier les ports ouverts
+### Check Open Ports
 
 ```bash
-# Vérifier que les ports écoutent
+# Verify that ports are listening
 ss -ulnp | grep 27015   # Lobby UDP
 ss -tlnp | grep 5000    # Web panel TCP
 
-# Vérifier le firewall (UFW)
+# Check firewall (UFW)
 sudo ufw status
 ```
 
-### Script de santé complet
+### Full Health Check Script
 
 ```bash
 ./scripts/health_check.sh
 ```
 
-Ce script vérifie les 10 points critiques et affiche un rapport coloré. Tous les indicateurs doivent être verts avant d'inviter des joueurs.
+This script checks 10 critical points and displays a colour-coded report. All indicators must be green before inviting players.
 
 ---
 
-## 5. Premiers tests
+## 5. First Tests
 
-### 1. Se connecter au serveur lobby
+### 1. Connect to the Lobby Server
 
-Depuis CS:GO Legacy (console, touche `~`) :
+From CS:GO Legacy (console, `~` key):
 ```
-connect VOTRE_IP:27015
-```
-
-Vous devriez voir le serveur charger et le message de bienvenue du plugin s'afficher dans le chat.
-
-### 2. Tester les commandes de base
-
-Dans le chat du serveur lobby :
-```
-!rank          # Doit afficher votre rang (ELO 1000 initial)
-!status        # Doit afficher "0 joueurs en file d'attente"
-!queue         # Vous ajoute à la file
-!leave         # Vous retire de la file
-!top           # Affiche le leaderboard (vide au départ)
+connect YOUR_IP:27015
 ```
 
-### 3. Forcer un match (test avec un seul joueur)
+You should see the server load and the plugin's welcome message appear in chat.
 
-En tant qu'admin (voir [commandes admin](USAGE.md#commandes-admin)) :
+### 2. Test Basic Commands
+
+In the lobby server chat:
+```
+!rank          # Should display your rank (initial ELO 1000)
+!status        # Should display "0 players in queue"
+!queue         # Adds you to the queue
+!leave         # Removes you from the queue
+!top           # Displays the leaderboard (empty at start)
+```
+
+### 3. Force a Match (Test with a Single Player)
+
+As an admin (see [admin commands](USAGE.md#admin-commands)):
 ```
 !mm_forcestart
 ```
 
-Ceci démarre un match avec les joueurs actuellement en file, même si moins de 10. Utile pour tester le flux complet.
+This starts a match with players currently in queue, even if fewer than 10. Useful for testing the full flow.
 
-### 4. Vérifier le web panel
+### 4. Check the Web Panel
 
-Ouvrir dans un navigateur : `http://VOTRE_IP:5000`
+Open in a browser: `http://YOUR_IP:5000`
 
-Le leaderboard doit s'afficher (vide au début). Après quelques matchs, les statistiques apparaîtront.
+The leaderboard should be displayed (empty at first). After a few matches, statistics will appear.
 
 ---
 
-## 6. Dépannage
+## 6. Troubleshooting
 
-### Les plugins ne se chargent pas
+### Plugins Not Loading
 
-**Symptôme** : Les commandes `!queue` etc. ne fonctionnent pas, pas de message de bienvenue.
+**Symptom**: Commands like `!queue` don't work, no welcome message.
 
-**Cause** : Les fichiers `.smx` (plugins compilés) ne sont pas dans le bon dossier.
+**Cause**: The `.smx` files (compiled plugins) are not in the right folder.
 
-**Solution** :
+**Fix**:
 ```bash
-# Vérifier la présence des plugins
+# Check for plugins
 ls -la /home/steam/csgo-dedicated/csgo/addons/sourcemod/plugins/
-# Doit contenir : csgo_mm_queue.smx, csgo_mm_notify.smx, etc.
+# Should contain: csgo_mm_queue.smx, csgo_mm_notify.smx, etc.
 
-# Si vide, forcer la compilation via CI (push sur GitHub)
-# ou compiler manuellement (voir DEPLOY.md)
+# If empty, trigger compilation via CI (push to GitHub)
+# or compile manually (see DEPLOY.md)
 ```
 
-### Le matchmaker ne démarre pas
+### Matchmaker Not Starting
 
-**Symptôme** : `systemctl status csgo-matchmaker` indique `failed`.
+**Symptom**: `systemctl status csgo-matchmaker` shows `failed`.
 
-**Causes courantes** :
+**Common causes**:
 
 ```bash
-# 1. Vérifier que MySQL est prêt
+# 1. Check that MySQL is ready
 sudo systemctl status mysql
 
-# 2. Vérifier config.env
+# 2. Check config.env
 cat config.env | grep DB_
 
-# 3. Tester la connexion manuellement
-python3 -c "import mysql.connector; mysql.connector.connect(host='localhost', user='csgo_mm', password='VOTRE_MOT_DE_PASSE', database='csgo_matchmaking')"
+# 3. Test the connection manually
+python3 -c "import mysql.connector; mysql.connector.connect(host='localhost', user='csgo_mm', password='YOUR_PASSWORD', database='csgo_matchmaking')"
 
-# 4. Relancer après correction
+# 4. Restart after fixing
 sudo systemctl restart csgo-matchmaker
 ```
 
-### Les joueurs ne sont pas redirigés vers le serveur match
+### Players Not Redirected to Match Server
 
-**Symptôme** : Le ready check passe, mais les joueurs restent sur le lobby.
+**Symptom**: The ready check passes, but players stay on the lobby.
 
-**Causes** :
-1. Le plugin `csgo_mm_queue.smx` n'est pas chargé → vérifier les plugins
-2. Docker n'a pas pu créer le conteneur match → `docker logs csgo-match-XXX`
-3. Le token GSLT du match est invalide → vérifier `mm_gslt_tokens` en DB
+**Causes**:
+1. The `csgo_mm_queue.smx` plugin is not loaded → check plugins
+2. Docker failed to create the match container → `docker logs csgo-match-XXX`
+3. The match GSLT token is invalid → check `mm_gslt_tokens` in DB
 
 ```bash
-# Voir les logs du matchmaker
+# View matchmaker logs
 sudo journalctl -u csgo-matchmaker -n 100
 
-# Voir les conteneurs match
+# View match containers
 docker ps -a --filter "name=csgo-match-"
 docker logs csgo-match-<ID>
 ```
 
-### Le web panel est inaccessible
+### Web Panel Inaccessible
 
 ```bash
-# Vérifier le service
+# Check the service
 sudo systemctl status csgo-webpanel
 
-# Vérifier le port
+# Check the port
 ss -tlnp | grep 5000
 
-# Vérifier le firewall
+# Check the firewall
 sudo ufw allow 5000/tcp
 sudo ufw reload
 ```
 
-### Token GSLT invalide
+### Invalid GSLT Token
 
-**Symptôme** : Le serveur lobby démarre mais est invisible dans le navigateur de serveurs, ou les logs indiquent "Invalid GSLT".
+**Symptom**: The lobby server starts but is invisible in the server browser, or logs show "Invalid GSLT".
 
-**Solution** :
-1. Aller sur [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers)
-2. Révoquer et regénérer le token concerné avec AppID **730**
-3. Mettre à jour `config.env` :
+**Fix**:
+1. Go to [steamcommunity.com/dev/managegameservers](https://steamcommunity.com/dev/managegameservers)
+2. Revoke and regenerate the relevant token with AppID **730**
+3. Update `config.env`:
    ```bash
-   nano config.env  # Modifier GSLT_LOBBY ou les tokens match
+   nano config.env  # Edit GSLT_LOBBY or the match tokens
    sudo systemctl restart csgo-lobby
    ```
 
-### Réinitialiser complètement
+### Full Reset
 
-Si besoin de tout recommencer depuis zéro :
+If you need to start completely from scratch:
 
 ```bash
-# Arrêter les services
+# Stop services
 sudo systemctl stop csgo-lobby csgo-matchmaker csgo-webpanel
 
-# Supprimer la DB (DESTRUCTIF)
+# Drop the database (DESTRUCTIVE)
 mysql -u root -e "DROP DATABASE csgo_matchmaking;"
 
-# Relancer le wizard
+# Re-run the wizard
 sudo ./install.sh
 ```
 
 ---
 
-## Étapes suivantes
+## Next Steps
 
-- [Configuration avancée](CONFIGURATION.md) — tous les paramètres `config.env`
-- [Utilisation en jeu](USAGE.md) — commandes joueurs et admin
-- [Maintenance](MAINTENANCE.md) — backups, mises à jour, monitoring
+- [Advanced Configuration](CONFIGURATION.md) — all `config.env` parameters
+- [In-Game Usage](USAGE.md) — player and admin commands
+- [Maintenance](MAINTENANCE.md) — backups, updates, monitoring
