@@ -144,9 +144,16 @@ Copy `config.example.env` to `config.env` and adjust values. Key settings:
 - `READY_CHECK_TIMEOUT`: Seconds to accept (default: 30)
 - `WARMUP_TIMEOUT`: Seconds to connect before match cancellation (default: 180)
 
-## Contributing
+## Documentation
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code conventions, and how to add new backends.
+| Document | Description |
+|----------|-------------|
+| [Installation](docs/INSTALLATION.md) | Step-by-step setup guide, GSLT tokens, troubleshooting |
+| [Configuration](docs/CONFIGURATION.md) | Complete `config.env` reference, ELO tiers, backend options |
+| [Usage](docs/USAGE.md) | In-game commands, matchmaking flow, web panel, admin commands |
+| [Maintenance](docs/MAINTENANCE.md) | Backups, updates, monitoring, season resets, DB management |
+| [Deploy](DEPLOY.md) | Deployment modes (bare-metal vs Docker Compose) |
+| [Contributing](CONTRIBUTING.md) | Developer setup, adding backends, code conventions |
 
 ## Tech Stack
 
