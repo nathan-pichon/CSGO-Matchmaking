@@ -59,6 +59,8 @@ class Database:
             "charset": "utf8mb4",
             "collation": "utf8mb4_unicode_ci",
             "time_zone": "+00:00",
+            # Raise PoolError after 10 s instead of blocking indefinitely.
+            "connection_timeout": 10,
         }
         self._pool: Optional[pooling.MySQLConnectionPool] = None
         self._lock = threading.Lock()

@@ -11,9 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies first (layer cache)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies first (layer cache).
+# requirements-lock.txt contains pinned versions for reproducible builds.
+# Regenerate with: pip freeze > requirements-lock.txt (inside a clean venv)
+COPY requirements.txt requirements-lock.txt ./
+RUN pip install --no-cache-dir -r requirements-lock.txt
 
 # Copy source code
 COPY . .

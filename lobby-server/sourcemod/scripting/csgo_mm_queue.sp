@@ -149,6 +149,7 @@ void ResetClientState(int client)
 
 public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     int client = GetClientOfUserId(event.GetInt("userid"));
     if (!MM_IsValidClient(client))
         return Plugin_Continue;
@@ -175,6 +176,7 @@ public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBr
 
 public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     // Track when a player moves to spectator for AFK detection
     int client = GetClientOfUserId(event.GetInt("userid"));
     if (!MM_IsValidClient(client))

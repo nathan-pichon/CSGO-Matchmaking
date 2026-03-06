@@ -288,6 +288,7 @@ void ReadTeamRostersFromConVars()
 public bool OnClientPreConnectEx(const char[] name, char password[255],
     const char[] ip, const char[] steamID, char rejectReason[255])
 {
+    #pragma unused name, password, ip
     // Always allow bots and LAN clients (steamID will be "BOT" or empty)
     if (StrEqual(steamID, "BOT", false) || steamID[0] == '\0')
         return true;
@@ -309,6 +310,7 @@ public bool OnClientPreConnectEx(const char[] name, char password[255],
 
 public Action Event_PlayerConnectFull(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     int client = GetClientOfUserId(event.GetInt("userid"));
     if (!MM_IsValidClient(client))
         return Plugin_Continue;
@@ -336,6 +338,7 @@ public Action Event_PlayerConnectFull(Event event, const char[] name, bool dontB
 
 public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     int client = GetClientOfUserId(event.GetInt("userid"));
     if (client <= 0 || IsFakeClient(client))
         return Plugin_Continue;
@@ -489,6 +492,7 @@ public Action Timer_WarmupTimeout(Handle timer)
 
 public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     // Only count stats during live play
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
@@ -520,6 +524,7 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
 
 public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
 
@@ -539,6 +544,7 @@ public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcas
 
 public Action Event_PlayerMVP(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
 
@@ -555,6 +561,7 @@ public Action Event_PlayerMVP(Event event, const char[] name, bool dontBroadcast
 
 public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
 
@@ -594,6 +601,7 @@ public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 public Action Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 {
+    #pragma unused name, dontBroadcast
     // Guard: only process once
     if (g_eMatchState == MatchState_Finished)
         return Plugin_Continue;

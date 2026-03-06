@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from extensions import limiter
 from models import query_db, query_one
 
 api_bp = Blueprint("api_bp", __name__)
@@ -27,6 +28,7 @@ def _err(message: str, status: int) -> tuple:
 # ---------------------------------------------------------------------------
 
 @api_bp.route("/queue/count")
+@limiter.limit("60 per minute")
 def queue_count() -> tuple:
     """
     Return the number of players currently searching for a match.
@@ -45,6 +47,7 @@ def queue_count() -> tuple:
 
 
 @api_bp.route("/player/<steam_id>")
+@limiter.limit("30 per minute")
 def player_stats(steam_id: str) -> tuple:
     """
     Return full stats for a single player.
@@ -68,6 +71,7 @@ def player_stats(steam_id: str) -> tuple:
 
 
 @api_bp.route("/leaderboard")
+@limiter.limit("20 per minute")
 def leaderboard() -> tuple:
     """
     Return top players from the leaderboard.
@@ -96,6 +100,7 @@ def leaderboard() -> tuple:
 
 
 @api_bp.route("/matches")
+@limiter.limit("20 per minute")
 def recent_matches() -> tuple:
     """
     Return recent finished matches.

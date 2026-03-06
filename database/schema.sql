@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS mm_matches (
   winner                ENUM('team1', 'team2', 'tie') NULL,
   cancel_reason         VARCHAR(255)  NULL,
   cleaned_up            TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1 after container destroyed and ports released',
+  cleanup_attempts      TINYINT       NOT NULL DEFAULT 0 COMMENT 'Failed cleanup attempts; forced clean at 5',
   started_at            DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   live_at               DATETIME      NULL COMMENT 'When knife round ends / match goes live',
   ended_at              DATETIME      NULL,
@@ -360,3 +361,24 @@ FROM mm_players p
 WHERE p.matches_played >= 1
   AND p.is_banned = 0
 ORDER BY p.elo DESC;
+
+-- ============================================================
+-- IDEMPOTENT MIGRATIONS
+-- Safe to re-run on existing databases.
+-- New installs: the columns already exist from CREATE TABLE above.
+-- ============================================================
+
+-- Add cleanup_attempts to mm_matches (added in v1.1.0)
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'mm_matches'
+    AND COLUMN_NAME  = 'cleanup_attempts'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE mm_matches ADD COLUMN cleanup_attempts TINYINT NOT NULL DEFAULT 0 COMMENT ''Failed cleanup attempts; forced clean at 5'' AFTER cleaned_up',
+  'SELECT 1 /* cleanup_attempts already exists */'
+);
+PREPARE _migration FROM @sql;
+EXECUTE _migration;
+DEALLOCATE PREPARE _migration;

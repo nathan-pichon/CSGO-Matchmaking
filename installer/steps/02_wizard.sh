@@ -232,6 +232,14 @@ _wizard_step_webpanel() {
 
     FLASK_SECRET_KEY="$(generate_password 48)"
 
+    # Admin token — generate once, keep on re-runs (update mode)
+    if [[ -z "${ADMIN_TOKEN:-}" ]]; then
+        ADMIN_TOKEN="$(generate_hex_password 24)"
+        ok "Generated admin token (saved to config.env — keep it secret!)"
+    else
+        ok "Admin token retained from existing config"
+    fi
+
     # Discord webhook
     if confirm "Enable Discord notifications?"; then
         while true; do

@@ -28,10 +28,20 @@ readonly MIN_CPU_CORES=2
 readonly MIN_DISK_GB=50
 readonly REQUIRED_PORTS=(27015 27020 3306 5000)
 
-# ── Third-party versions ───────────────────────────────────────────────────────
+# ── Third-party versions & checksums ──────────────────────────────────────────
 readonly SM_VERSION="1.11"
-readonly SM_BUILD="7152"
-readonly MM_VERSION="1.12"
+readonly SM_BUILD="6970"   # git6970 — latest available 1.11 build on AlliedMods CDN
+readonly MM_VERSION="1.11" # MetaMod version matches SourceMod branch
+
+# SHA256 checksums for downloaded archives (verified at install time)
+readonly MM_SHA256="977607008ec94dd5fff6e5bc351fcf1610e2e9852ac61268fc798a6a1d282a2d"
+readonly SM_SHA256="075ebcd0e8aa7192b83ac2e21a645638261fb1bc6882ec12f8736ac6aca7c29a7"
+
+# Vendored third-party SourceMod plugin versions (binaries committed in vendor/)
+readonly LR_VERSION="3.1.6"  # Levels Ranks Core — https://github.com/levelsranks/pawn-levels_ranks-core
+readonly SR_VERSION="1.3.1"  # ServerRedirect    — https://github.com/GAMMACASE/ServerRedirect
+readonly LR_SHA256="a17155442448f5ff757a50677bb7035c7ab6badf542680293ef858669eaeaa7c"
+readonly SR_SHA256="8947e3028ae2762a580044ce5412c5d8201f005ff4702b65e5dd8065a5054839"
 
 # ── Available maps ─────────────────────────────────────────────────────────────
 readonly ALL_MAPS=(
@@ -74,5 +84,6 @@ MAX_ELO_SPREAD="200"
 READY_CHECK_TIMEOUT="30"
 DISCORD_WEBHOOK_URL=""
 FLASK_SECRET_KEY=""
+ADMIN_TOKEN=""
 SELECTED_MAPS=()
 USE_EXISTING_MYSQL="n"

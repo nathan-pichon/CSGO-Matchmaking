@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login — CS:GO MM{% endblock %}
+
+{% block content %}
+<div class="admin-login-wrap">
+  <div class="card admin-login-card">
+    <h1 class="admin-login-title">
+      <span class="logo-bracket">[</span>ADMIN<span class="logo-accent">&#8201;&#x25A0;</span><span class="logo-bracket">]</span>
+    </h1>
+    <p class="admin-login-sub">Enter your admin token to continue.</p>
+
+    <form method="post" action="{{ url_for('admin_bp.login_post') }}" autocomplete="off">
+      <div class="form-group">
+        <label for="token" class="form-label">Token</label>
+        <input
+          type="password"
+          id="token"
+          name="token"
+          class="form-input"
+          placeholder="••••••••••••••••••••••••"
+          required
+          autofocus
+        />
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .admin-login-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - var(--navbar-height) - 80px);
+    padding: 2rem 1rem;
+  }
+  .admin-login-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+  }
+  .admin-login-title {
+    font-size: 1.8rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+  .admin-login-sub {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+  .form-group   { text-align: left; margin-bottom: 1.2rem; }
+  .form-label   { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-input   { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--border-radius); color: var(--text-primary); font-size: 1rem; transition: border-color var(--transition); }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .btn          { display: inline-block; padding: 0.65rem 1.4rem; border: none; border-radius: var(--border-radius); font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background var(--transition); }
+  .btn-primary  { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-block    { display: block; width: 100%; }
+</style>
+{% endblock %}

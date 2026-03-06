@@ -17,8 +17,10 @@ build/
 .eggs/
 *.egg
 
-# SourcePawn compiled plugins
+# SourcePawn compiled plugins (auto-generated, excluded from version control)
 *.smx
+# Exception: vendored third-party binaries are committed intentionally
+!vendor/**/*.smx
 
 # CS:GO server files (downloaded at install)
 csgo-server/

@@ -67,19 +67,38 @@ install_lobby_plugins() {
 
 # ── install_sourcemod private helpers ──────────────────────────────────────────
 
+# ── Checksum helper ────────────────────────────────────────────────────────────
+
+_verify_sha256() {
+    # Usage: _verify_sha256 <file> <expected_sha256>
+    # Dies with an error message if the checksum does not match.
+    local file="$1" expected="$2"
+    local actual
+    actual="$(sha256sum "${file}" | awk '{print $1}')"
+    if [[ "${actual}" != "${expected}" ]]; then
+        die "Checksum mismatch for ${file}:
+  Expected: ${expected}
+  Got:      ${actual}
+File may be corrupted or tampered with. Aborting."
+    fi
+}
+
+# ── MetaMod / SourceMod installers ─────────────────────────────────────────────
+
 _install_metamod() {
     local addons_dir="$1"
     if [[ -d "${addons_dir}/metamod" ]]; then
         ok "MetaMod:Source already installed"; return
     fi
-    info "Downloading MetaMod:Source..."
+    info "Downloading MetaMod:Source 1.11.0-git1148..."
     local mm_url="https://mms.alliedmods.net/mmsdrop/1.11/mmsource-1.11.0-git1148-linux.tar.gz"
     local mm_file="/tmp/metamod_linux.tar.gz"
     with_retry curl -fsSL "${mm_url}" -o "${mm_file}" || true
     if [[ -f "${mm_file}" ]]; then
+        _verify_sha256 "${mm_file}" "${MM_SHA256}"
         tar -xzf "${mm_file}" -C "${addons_dir}/"
         rm -f "${mm_file}"
-        ok "MetaMod:Source installed"
+        ok "MetaMod:Source installed (checksum verified)"
     else
         warn "MetaMod:Source download failed — install manually from https://www.sourcemm.net/"
     fi
@@ -90,17 +109,25 @@ _install_sourcemod_core() {
     if [[ -d "${addons_dir}/sourcemod" ]]; then
         ok "SourceMod already installed"; return
     fi
-    info "Downloading SourceMod ${SM_VERSION}..."
+    info "Downloading SourceMod ${SM_VERSION}.0-git${SM_BUILD}..."
     local sm_url="https://sm.alliedmods.net/smdrop/${SM_VERSION}/sourcemod-${SM_VERSION}.0-git${SM_BUILD}-linux.tar.gz"
     local sm_file="/tmp/sourcemod_linux.tar.gz"
 
-    with_retry curl -fsSL "${sm_url}" -o "${sm_file}" || {
-        info "Trying to find latest SourceMod build..."
+    if ! with_retry curl -fsSL "${sm_url}" -o "${sm_file}"; then
+        # Pinned build unavailable — warn and fall back to latest stable.
+        warn "SourceMod ${SM_VERSION}.0-git${SM_BUILD} not found on CDN."
+        warn "Falling back to latest stable — checksum verification will be SKIPPED."
         local latest_url
         latest_url="$(with_retry curl -sfL "https://www.sourcemod.net/downloads.php?branch=stable" \
             | grep -oP 'https://sm\.alliedmods\.net/smdrop/[^"]+linux\.tar\.gz' | head -1 || echo "")"
-        [[ -n "${latest_url}" ]] && with_retry curl -fsSL "${latest_url}" -o "${sm_file}"
-    }
+        if [[ -n "${latest_url}" ]]; then
+            warn "Downloading latest SourceMod from: ${latest_url}"
+            with_retry curl -fsSL "${latest_url}" -o "${sm_file}"
+        fi
+    else
+        # Pinned build: verify checksum before extraction.
+        _verify_sha256 "${sm_file}" "${SM_SHA256}"
+    fi
 
     if [[ -f "${sm_file}" ]]; then
         tar -xzf "${sm_file}" -C "${addons_dir}/"
@@ -114,6 +141,19 @@ _install_sourcemod_core() {
 
 _install_levels_ranks_plugin() {
     local sm_dir="$1"
+    local vendor_smx="${SCRIPT_DIR}/vendor/sourcemod/plugins/levels_ranks.smx"
+    local dst_smx="${sm_dir}/plugins/levelsranks.smx"
+
+    # Vendor-first: copy pinned binary from repo if available.
+    if [[ -f "${vendor_smx}" ]]; then
+        _verify_sha256 "${vendor_smx}" "${LR_SHA256}"
+        cp "${vendor_smx}" "${dst_smx}"
+        ok "Levels Ranks v${LR_VERSION} installed from vendor/ (checksum verified)"
+        return 0
+    fi
+
+    # Fallback: download latest release from GitHub.
+    warn "vendor/sourcemod/plugins/levels_ranks.smx not found — downloading latest release."
     info "Downloading Levels Ranks plugin..."
     local api_url="https://api.github.com/repos/levelsranks/pawn-levels_ranks-core/releases/latest"
     local asset_url
@@ -131,27 +171,39 @@ _install_levels_ranks_plugin() {
         find /tmp/lr_extract/ -name '*.smx'          -exec cp {} "${sm_dir}/plugins/"      \; 2>/dev/null || true
         find /tmp/lr_extract/ -name '*.phrases.txt'  -exec cp {} "${sm_dir}/translations/" \; 2>/dev/null || true
         rm -rf /tmp/levels_ranks.zip /tmp/lr_extract/
-        ok "Levels Ranks plugin installed"
+        ok "Levels Ranks plugin installed (unverified — consider updating vendor/)"
     fi
 }
 
 _install_serverredirect_plugin() {
     local sm_dir="$1"
+    local vendor_smx="${SCRIPT_DIR}/vendor/sourcemod/plugins/serverredirect.smx"
+    local dst="${sm_dir}/plugins/serverredirect.smx"
+
+    # Vendor-first: copy pinned binary from repo if available.
+    if [[ -f "${vendor_smx}" ]]; then
+        _verify_sha256 "${vendor_smx}" "${SR_SHA256}"
+        cp "${vendor_smx}" "${dst}"
+        ok "ServerRedirect v${SR_VERSION} installed from vendor/ (checksum verified)"
+        return 0
+    fi
+
+    # Fallback: download latest release from GitHub.
+    warn "vendor/sourcemod/plugins/serverredirect.smx not found — downloading latest release."
     info "Downloading ServerRedirect plugin..."
     local api_url="https://api.github.com/repos/GAMMACASE/ServerRedirect/releases/latest"
     local asset_url
     asset_url="$(with_retry curl -sfL "${api_url}" \
         | grep -oP '"browser_download_url":\s*"\K[^"]+\.smx' | head -1 || echo "")"
 
-    local dst="${sm_dir}/plugins/serverredirect.smx"
     if [[ -n "${asset_url}" ]]; then
         with_retry curl -fsSL "${asset_url}" -o "${dst}" \
-            && ok "ServerRedirect plugin installed"
+            && ok "ServerRedirect plugin installed (unverified — consider updating vendor/)"
     else
         # Fallback to raw file in repository
         local raw="https://raw.githubusercontent.com/GAMMACASE/ServerRedirect/master/addons/sourcemod/plugins/serverredirect.smx"
         with_retry curl -fsSL "${raw}" -o "${dst}" 2>/dev/null \
-            && ok "ServerRedirect plugin installed (from raw)" \
+            && ok "ServerRedirect plugin installed from GitHub raw (unverified)" \
             || warn "Could not download ServerRedirect — install manually."
     fi
 }

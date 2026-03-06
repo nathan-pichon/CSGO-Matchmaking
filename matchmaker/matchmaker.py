@@ -534,8 +534,18 @@ class MatchmakingDaemon:
             {k: v for k, v in elo_changes.items()},
         )
 
+    # Maximum cleanup attempts before the daemon force-marks a match cleaned.
+    _CLEANUP_MAX_ATTEMPTS = 5
+
     def _step_cleanup_servers(self) -> None:
-        """Destroy containers and release ports/GSLTs for finished matches."""
+        """Destroy containers and release ports/GSLTs for finished matches.
+
+        Each match tracks the number of failed cleanup attempts in
+        ``cleanup_attempts``. After :attr:`_CLEANUP_MAX_ATTEMPTS` failures
+        the match is force-marked as cleaned (``cleaned_up=1``) so it no
+        longer blocks resources forever, and an ERROR is logged for manual
+        investigation of the orphaned container.
+        """
         try:
             matches = self._db.get_matches_needing_cleanup()
             if not matches:
@@ -545,12 +555,48 @@ class MatchmakingDaemon:
             cleaned_set = set(cleaned_ids)
 
             for match in matches:
+                match_id = match["id"]
                 container_id = match.get("docker_container_id")
+                cleanup_attempts = int(match.get("cleanup_attempts", 0))
+
                 if container_id and container_id not in cleaned_set:
-                    # Server could not be destroyed – skip cleanup for now.
+                    # Container could not be destroyed this tick.
+                    new_attempts = cleanup_attempts + 1
+                    self._db.execute(
+                        "UPDATE mm_matches SET cleanup_attempts = %s WHERE id = %s",
+                        (new_attempts, match_id),
+                    )
+
+                    if new_attempts >= self._CLEANUP_MAX_ATTEMPTS:
+                        # Force-mark as cleaned to avoid infinite loop.
+                        logger.error(
+                            "_step_cleanup_servers: match_id=%d container=%s "
+                            "could not be destroyed after %d attempts — "
+                            "force-marking cleaned_up=1 and releasing resources. "
+                            "Manual container removal may be required.",
+                            match_id, container_id, new_attempts,
+                        )
+                        try:
+                            self._db.mark_match_cleaned(match_id)
+                            if match.get("server_port"):
+                                self._db.release_port(match["server_port"])
+                            if match.get("gslt_token"):
+                                self._db.release_gslt(match["gslt_token"])
+                        except Exception as exc:
+                            logger.error(
+                                "_step_cleanup_servers: force-clean DB error "
+                                "match_id=%d: %s",
+                                match_id, exc,
+                            )
+                    else:
+                        logger.warning(
+                            "_step_cleanup_servers: match_id=%d container=%s "
+                            "not cleaned yet (attempt %d/%d)",
+                            match_id, container_id,
+                            new_attempts, self._CLEANUP_MAX_ATTEMPTS,
+                        )
                     continue
 
-                match_id = match["id"]
                 try:
                     self._db.mark_match_cleaned(match_id)
                     if match.get("server_port"):

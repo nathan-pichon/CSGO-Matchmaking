@@ -12,12 +12,17 @@ from __future__ import annotations
 
 import logging
 import socket
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # Default RCON command timeout in seconds.
 _DEFAULT_TIMEOUT = 5
+
+# Retry configuration for transient connection failures.
+_RETRY_ATTEMPTS = 3      # total attempts (1 initial + 2 retries)
+_RETRY_BASE_DELAY = 1.0  # seconds; doubles on each retry: 1 s, 2 s
 
 
 class RCONClient:
@@ -57,6 +62,10 @@ class RCONClient:
     ) -> str:
         """Send an RCON command and return the server response.
 
+        Retries up to ``_RETRY_ATTEMPTS`` times on transient failures
+        (socket timeout, connection refused) with exponential back-off.
+        Permanent errors (wrong password, import error) are not retried.
+
         Args:
             host: IP address or hostname of the game server.
             port: RCON port (same as game port for SRCDS).
@@ -71,46 +80,54 @@ class RCONClient:
             # Import here to allow the module to load even if python-valve
             # is not installed (tests can mock this import).
             import valve.rcon  # type: ignore[import]
-
-            with valve.rcon.RCON((host, port), password, timeout=self._timeout) as rcon:
-                response: str = rcon.execute(command).text
-                logger.debug(
-                    "RCON %s:%d cmd=%r response_len=%d",
-                    host, port, command, len(response),
-                )
-                return response
-
         except ImportError:
             logger.error("python-valve is not installed; RCON is unavailable")
             return ""
 
-        except socket.timeout:
-            logger.warning(
-                "RCON %s:%d timed out after %ds (cmd=%r)",
-                host, port, self._timeout, command,
-            )
-            return ""
+        for attempt in range(1, _RETRY_ATTEMPTS + 1):
+            try:
+                with valve.rcon.RCON((host, port), password, timeout=self._timeout) as rcon:
+                    response: str = rcon.execute(command).text
+                    logger.debug(
+                        "RCON %s:%d cmd=%r response_len=%d (attempt %d)",
+                        host, port, command, len(response), attempt,
+                    )
+                    return response
 
-        except ConnectionRefusedError:
-            logger.warning(
-                "RCON %s:%d connection refused (server not ready?) cmd=%r",
-                host, port, command,
-            )
-            return ""
+            except (socket.timeout, ConnectionRefusedError) as exc:
+                exc_label = "timeout" if isinstance(exc, socket.timeout) else "refused"
+                if attempt < _RETRY_ATTEMPTS:
+                    delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "RCON %s:%d %s (cmd=%r) — retrying in %.1fs "
+                        "(attempt %d/%d)",
+                        host, port, exc_label, command, delay,
+                        attempt, _RETRY_ATTEMPTS,
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.warning(
+                        "RCON %s:%d %s after %d attempts (cmd=%r)",
+                        host, port, exc_label, _RETRY_ATTEMPTS, command,
+                    )
+                    return ""
 
-        except OSError as exc:
-            logger.warning(
-                "RCON %s:%d OS error: %s (cmd=%r)", host, port, exc, command
-            )
-            return ""
+            except OSError as exc:
+                logger.warning(
+                    "RCON %s:%d OS error: %s (cmd=%r)", host, port, exc, command
+                )
+                return ""
 
-        except Exception as exc:
-            # Catches valve.rcon.RCONCommunicationError, WrongPassword, etc.
-            exc_type = type(exc).__name__
-            logger.warning(
-                "RCON %s:%d %s: %s (cmd=%r)", host, port, exc_type, exc, command
-            )
-            return ""
+            except Exception as exc:
+                # Catches valve.rcon.RCONCommunicationError, WrongPassword, etc.
+                # Not retried — these are permanent or logic errors.
+                exc_type = type(exc).__name__
+                logger.warning(
+                    "RCON %s:%d %s: %s (cmd=%r)", host, port, exc_type, exc, command
+                )
+                return ""
+
+        return ""  # unreachable but keeps type-checker happy
 
     def say(
         self,

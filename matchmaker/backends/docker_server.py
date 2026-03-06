@@ -160,17 +160,36 @@ class DockerServerBackend(ServerBackend):
             container_name, image, server_port, map_name,
         )
 
-        container: Container = self._get_client().containers.run(
-            image=image,
-            name=container_name,
-            hostname=hostname,
-            environment=env,
-            network_mode="host",
-            mem_limit="2g",
-            restart_policy={"Name": "no"},
-            detach=True,
-            remove=False,  # we remove manually after cleanup
-        )
+        try:
+            container: Container = self._get_client().containers.run(
+                image=image,
+                name=container_name,
+                hostname=hostname,
+                environment=env,
+                network_mode="host",
+                mem_limit="2g",
+                restart_policy={"Name": "no"},
+                detach=True,
+                remove=False,  # we remove manually after cleanup
+            )
+        except docker.errors.ImageNotFound:
+            logger.error(
+                "create_server: Docker image '%s' not found — "
+                "rebuild the image with install.sh (match_id=%d)",
+                image, match_id,
+            )
+            raise RuntimeError(
+                f"Docker image '{image}' not found. "
+                "Run install.sh to rebuild the match-server image."
+            )
+        except docker.errors.APIError as exc:
+            logger.error(
+                "create_server: Docker API error for match_id=%d: %s",
+                match_id, exc,
+            )
+            raise RuntimeError(
+                f"Docker API error while starting match server: {exc}"
+            ) from exc
 
         logger.info(
             "create_server: container started id=%s match_id=%d",

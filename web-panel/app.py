@@ -7,7 +7,7 @@ from __future__ import annotations
 from flask import Flask, redirect, render_template, url_for
 
 from config import Config
-from extensions import cache
+from extensions import cache, limiter
 from models import db, query_one
 
 
@@ -30,17 +30,20 @@ def create_app(config_class: type = Config) -> Flask:
         "CACHE_TYPE": config_class.CACHE_TYPE,
         "CACHE_DEFAULT_TIMEOUT": config_class.CACHE_TIMEOUT,
     })
+    limiter.init_app(app)
 
     # Register blueprints
     from routes.leaderboard import leaderboard_bp
     from routes.players import players_bp
     from routes.matches import matches_bp
     from routes.api import api_bp
+    from routes.admin import admin_bp
 
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(players_bp)
     app.register_blueprint(matches_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(admin_bp)
 
     # ---------------------------------------------------------------------------
     # Context processor — inject queue count into every template

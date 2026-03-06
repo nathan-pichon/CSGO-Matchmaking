@@ -11,9 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Python deps — use pinned lockfile for reproducible builds.
+# Regenerate with: pip freeze > requirements-lock.txt (inside a clean venv)
+COPY requirements.txt requirements-lock.txt ./
+RUN pip install --no-cache-dir -r requirements-lock.txt
 
 # App source
 COPY . .

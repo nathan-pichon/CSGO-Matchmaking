@@ -52,13 +52,24 @@ _python_setup_venv() {
 
     "${venv_path}/bin/pip" install --quiet --upgrade pip
 
-    if [[ -f "${app_dir}/requirements.txt" ]]; then
-        info "Installing Python dependencies from ${app_dir}/requirements.txt..."
-        "${venv_path}/bin/pip" install --quiet -r "${app_dir}/requirements.txt"
-        ok "Dependencies installed"
+    # Prefer the pinned lockfile for reproducible installs; fall back to requirements.txt.
+    local req_lock="${app_dir}/requirements-lock.txt"
+    local req_file="${app_dir}/requirements.txt"
+    local install_from
+
+    if [[ -f "${req_lock}" ]]; then
+        install_from="${req_lock}"
+        info "Installing pinned dependencies from ${req_lock}..."
+    elif [[ -f "${req_file}" ]]; then
+        install_from="${req_file}"
+        warn "No requirements-lock.txt found — installing from requirements.txt (versions may float)."
     else
-        warn "requirements.txt not found in ${app_dir}/ — skipping pip install."
+        warn "No requirements file found in ${app_dir}/ — skipping pip install."
+        return 0
     fi
+
+    "${venv_path}/bin/pip" install --quiet -r "${install_from}"
+    ok "Dependencies installed from $(basename "${install_from}")"
 }
 
 # _python_check_imports <venv_path> <module> [<module>...]

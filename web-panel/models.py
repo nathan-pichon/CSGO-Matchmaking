@@ -32,6 +32,22 @@ def query_db(sql: str, params: dict[str, Any] | None = None) -> list[dict[str, A
         return [dict(zip(columns, row)) for row in result.fetchall()]
 
 
+def execute_db(sql: str, params: dict[str, Any] | None = None) -> int:
+    """
+    Execute a write SQL statement (INSERT / UPDATE / DELETE) and commit.
+
+    Args:
+        sql: Parameterized SQL string (use :param_name style placeholders).
+        params: Optional dict of parameter values.
+
+    Returns:
+        Number of rows affected.
+    """
+    with db.engine.begin() as conn:
+        result = conn.execute(text(sql), params or {})
+        return result.rowcount
+
+
 def query_one(sql: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """
     Execute a raw SQL query and return the first row as a dict, or None.

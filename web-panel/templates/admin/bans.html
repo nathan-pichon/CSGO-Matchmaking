@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Ban Management — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Bans</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── New ban form ───────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Ban a Player</h2>
+  <form method="post" action="{{ url_for('admin_bp.ban_player') }}" class="admin-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="ban_steam_id" class="form-label">Steam ID</label>
+        <input type="text" id="ban_steam_id" name="steam_id" class="form-input"
+               placeholder="STEAM_0:1:12345678" required />
+      </div>
+      <div class="form-group form-group-sm">
+        <label for="ban_duration" class="form-label">Duration (min, 0=perm)</label>
+        <input type="number" id="ban_duration" name="duration_minutes" class="form-input"
+               min="0" value="0" />
+      </div>
+      <div class="form-group">
+        <label for="ban_reason" class="form-label">Reason</label>
+        <input type="text" id="ban_reason" name="reason" class="form-input"
+               placeholder="Cheating, toxicity…" />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-danger">Ban</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Active bans list ───────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Active Bans ({{ bans|length }})</h2>
+  {% if bans %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Steam ID</th>
+        <th>Player</th>
+        <th>Reason</th>
+        <th>Banned by</th>
+        <th>Banned at</th>
+        <th>Expires</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bans %}
+      <tr>
+        <td><code>{{ b.steam_id }}</code></td>
+        <td>{{ b.name or '—' }}</td>
+        <td>{{ b.reason or '—' }}</td>
+        <td>{{ b.banned_by or '—' }}</td>
+        <td>{{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '—' }}</td>
+        <td>
+          {% if b.expires_at %}
+            {{ b.expires_at.strftime('%Y-%m-%d %H:%M') }}
+          {% else %}
+            <span class="badge-perm">Permanent</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('admin_bp.unban_player') }}"
+                onsubmit="return confirm('Lift ban for {{ b.steam_id }}?')">
+            <input type="hidden" name="steam_id" value="{{ b.steam_id }}" />
+            <button type="submit" class="btn btn-ghost btn-sm btn-unban">Unban</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No active bans.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header    { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section     { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .form-row          { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group        { flex:1; min-width:160px; }
+  .form-group-sm     { flex:0 0 160px; }
+  .form-group-btn    { flex:0 0 auto; }
+  .form-label        { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input        { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; }
+  .form-input:focus  { outline:none; border-color:var(--accent); }
+  .btn               { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .btn-ghost         { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover   { border-color:var(--accent); color:var(--accent); }
+  .btn-sm            { padding:0.35rem 0.8rem; font-size:0.8rem; }
+  .btn-danger        { background:var(--danger); color:#fff; }
+  .btn-danger:hover  { background:#c62828; }
+  .btn-unban         { border-color:var(--success); color:var(--success); }
+  .btn-unban:hover   { background:rgba(76,175,80,.1); }
+  .badge-perm        { color:var(--danger); font-size:0.8rem; font-weight:600; }
+  .empty-state       { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+</style>
+{% endblock %}
