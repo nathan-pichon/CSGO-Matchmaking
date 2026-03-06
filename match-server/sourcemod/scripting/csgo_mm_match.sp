@@ -613,12 +613,6 @@ public Action Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
     CancelTimerSafe(g_hWarmupTimer);
 
     // ------------------------------------------------------------------
-    // Read final CT and T scores from the game
-    // ------------------------------------------------------------------
-    int ctScore = CS_GetTeamScore(CS_TEAM_CT);
-    int tScore  = CS_GetTeamScore(CS_TEAM_T);
-
-    // ------------------------------------------------------------------
     // Map CS:GO teams back to our team1/team2 based on starting sides.
     // g_iTeam1CSTeam is either CS_TEAM_CT or CS_TEAM_T.
     // ------------------------------------------------------------------

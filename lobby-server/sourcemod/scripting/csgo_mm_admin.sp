@@ -95,6 +95,7 @@ public void DB_GenericCallback(Database db, DBResultSet results, const char[] er
 
 int FindTargetClient(int admin, const char[] arg)
 {
+    #pragma unused admin
     // Numeric #userid form
     if (arg[0] == '#')
     {

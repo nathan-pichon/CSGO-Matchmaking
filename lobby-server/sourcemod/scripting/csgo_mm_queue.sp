@@ -572,7 +572,7 @@ public Action Cmd_Rank(int client, int args)
 
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT elo, rank_tier, matches_played, matches_won, matches_lost, total_kills, total_deaths FROM mm_players WHERE steam_id='%s' LIMIT 1",
+        "SELECT elo, rank_tier, matches_won, matches_lost, total_kills, total_deaths FROM mm_players WHERE steam_id='%s' LIMIT 1",
         steamID);
     g_hDB.Query(DB_RankCallback, query, GetClientUserId(client), DBPrio_Normal);
 
@@ -597,13 +597,12 @@ public void DB_RankCallback(Database db, DBResultSet results, const char[] error
         return;
     }
 
-    int elo             = results.FetchInt(0);
-    int tier            = results.FetchInt(1);
-    int matchesPlayed   = results.FetchInt(2);
-    int matchesWon      = results.FetchInt(3);
-    int matchesLost     = results.FetchInt(4);
-    int kills           = results.FetchInt(5);
-    int deaths          = results.FetchInt(6);
+    int elo         = results.FetchInt(0);
+    int tier        = results.FetchInt(1);
+    int matchesWon  = results.FetchInt(2);
+    int matchesLost = results.FetchInt(3);
+    int kills       = results.FetchInt(4);
+    int deaths      = results.FetchInt(5);
 
     char rankName[48];
     MM_GetRankName(tier, rankName, sizeof(rankName));
