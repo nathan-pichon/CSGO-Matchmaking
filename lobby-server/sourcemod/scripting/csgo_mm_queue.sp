@@ -161,16 +161,7 @@ public Action Timer_CheckEloNotification(Handle timer, DataPack pack)
     // Fetch the most recent match with an unnotified ELO change for this player.
     char query[768];
     g_hDB.Format(query, sizeof(query),
-        "SELECT mp.elo_before, mp.elo_after, mp.elo_change, mp.team, "
-        "       m.team1_score, m.team2_score, m.winner, mp.id, p.rank_tier "
-        "FROM mm_match_players mp "
-        "JOIN mm_matches m  ON m.id  = mp.match_id "
-        "JOIN mm_players p  ON p.steam_id = mp.steam_id "
-        "WHERE mp.steam_id = '%s' "
-        "  AND mp.elo_notified = 0 "
-        "  AND mp.elo_change IS NOT NULL "
-        "  AND m.status = 'finished' "
-        "ORDER BY m.ended_at DESC LIMIT 1",
+        "SELECT mp.elo_before, mp.elo_after, mp.elo_change, mp.team, m.team1_score, m.team2_score, m.winner, mp.id, p.rank_tier FROM mm_match_players mp JOIN mm_matches m ON m.id = mp.match_id JOIN mm_players p ON p.steam_id = mp.steam_id WHERE mp.steam_id = '%s' AND mp.elo_notified = 0 AND mp.elo_change IS NOT NULL AND m.status = 'finished' ORDER BY m.ended_at DESC LIMIT 1",
         steamID);
     g_hDB.Query(DB_RecentEloResult, query, GetClientUserId(client), DBPrio_Normal);
 
@@ -425,10 +416,7 @@ public void DB_CheckBan(Database db, DBResultSet results, const char[] error, Da
 
     char partyQuery[512];
     g_hDB.Format(partyQuery, sizeof(partyQuery),
-        "SELECT pm.party_id, (p.leader_id = '%s') AS is_leader "
-        "FROM mm_party_members pm "
-        "JOIN mm_parties p ON p.id = pm.party_id "
-        "WHERE pm.steam_id = '%s' LIMIT 1",
+        "SELECT pm.party_id, (p.leader_id = '%s') AS is_leader FROM mm_party_members pm JOIN mm_parties p ON p.id = pm.party_id WHERE pm.steam_id = '%s' LIMIT 1",
         escapedSteamID, escapedSteamID);
     g_hDB.Query(DB_CheckPartyForQueue, partyQuery, pack2, DBPrio_High);
 }
@@ -560,11 +548,7 @@ public void DB_QueueInserted(Database db, DBResultSet results, const char[] erro
     // Fetch estimated wait time for this player's ELO bracket
     char waitQuery[512];
     g_hDB.Format(waitQuery, sizeof(waitQuery),
-        "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) "
-        "FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id "
-        "WHERE q.status IN ('matched','ready_check') "
-        "  AND ABS(q.elo - %d) <= 300 "
-        "  AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
+        "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id WHERE q.status IN ('matched','ready_check') AND ABS(q.elo - %d) <= 300 AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
         g_iElo[client]);
     g_hDB.Query(DB_WaitTimeEstimate, waitQuery, GetClientUserId(client), DBPrio_Normal);
 }
@@ -625,8 +609,7 @@ public void DB_CheckPartyForQueue(Database db, DBResultSet results, const char[]
     if (!isLeader)
     {
         MM_WarnToChat(client,
-            "Only your party leader can start the queue. "
-            "Type \x04!party list\x01 to see who the leader is.");
+            "Only your party leader can start the queue. Type \x04!party list\x01 to see who the leader is.");
         return;
     }
 
@@ -638,11 +621,7 @@ public void DB_CheckPartyForQueue(Database db, DBResultSet results, const char[]
 
     char memberQuery[512];
     g_hDB.Format(memberQuery, sizeof(memberQuery),
-        "SELECT pm.steam_id, pl.elo, pl.rank_tier, pl.name, "
-        "       (pl.is_banned = 1 AND pl.ban_until > NOW()) AS is_banned "
-        "FROM mm_party_members pm "
-        "JOIN mm_players pl ON pl.steam_id = pm.steam_id "
-        "WHERE pm.party_id = %d",
+        "SELECT pm.steam_id, pl.elo, pl.rank_tier, pl.name, (pl.is_banned = 1 AND pl.ban_until > NOW()) AS is_banned FROM mm_party_members pm JOIN mm_players pl ON pl.steam_id = pm.steam_id WHERE pm.party_id = %d",
         partyId);
     g_hDB.Query(DB_QueuePartyMembers, memberQuery, pack2, DBPrio_High);
 }
@@ -663,9 +642,7 @@ void DoQueueSolo(Database db, int client, int userid, const char[] mapPref)
 
     char query[768];
     g_hDB.Format(query, sizeof(query),
-        "INSERT INTO mm_players (steam_id, steam_id64, name, elo, rank_tier) "
-        "VALUES ('%s', %s, '%s', 1000, 5) "
-        "ON DUPLICATE KEY UPDATE name='%s', last_queue=NOW()",
+        "INSERT INTO mm_players (steam_id, steam_id64, name, elo, rank_tier) VALUES ('%s', %s, '%s', 1000, 5) ON DUPLICATE KEY UPDATE name='%s', last_queue=NOW()",
         escapedSteamID, steam64Str, escapedName, escapedName);
     g_hDB.Query(DB_UpsertPlayer, query, pack, DBPrio_High);
 }
@@ -753,15 +730,13 @@ public void DB_QueuePartyMembers(Database db, DBResultSet results, const char[] 
         if (mapPref[0] != '\0')
         {
             g_hDB.Format(insertQuery, sizeof(insertQuery),
-                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) "
-                "VALUES ('%s', %d, %d, 'waiting', '%s')",
+                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) VALUES ('%s', %d, %d, 'waiting', '%s')",
                 memberSteamIDs[i], memberElos[i], memberRanks[i], escapedMap);
         }
         else
         {
             g_hDB.Format(insertQuery, sizeof(insertQuery),
-                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) "
-                "VALUES ('%s', %d, %d, 'waiting')",
+                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) VALUES ('%s', %d, %d, 'waiting')",
                 memberSteamIDs[i], memberElos[i], memberRanks[i]);
         }
         g_hDB.Query(DB_GenericCallback, insertQuery, _, DBPrio_High);
@@ -789,8 +764,7 @@ public void DB_QueuePartyMembers(Database db, DBResultSet results, const char[] 
         char rankName[48];
         MM_GetRankName(g_iRank[leader], rankName, sizeof(rankName));
         MM_PrintToChat(leader,
-            "\x04Party queue started!\x01 \x09%d\x01 member(s) queued. "
-            "Rank: \x04%s\x01 | ELO: \x09%d\x01 | Type \x04!leave\x01 to cancel.",
+            "\x04Party queue started!\x01 \x09%d\x01 member(s) queued. Rank: \x04%s\x01 | ELO: \x09%d\x01 | Type \x04!leave\x01 to cancel.",
             memberCount, rankName, g_iElo[leader]);
     }
 
@@ -812,8 +786,7 @@ public void DB_QueuePartyMembers(Database db, DBResultSet results, const char[] 
                 strcopy(leaderName, sizeof(leaderName), "Party Leader");
 
             MM_PrintToChat(c,
-                "\x04%s\x01 started the party queue! Searching for a match… "
-                "Type \x04!leave\x01 to cancel.",
+                "\x04%s\x01 started the party queue! Searching for a match… Type \x04!leave\x01 to cancel.",
                 leaderName);
             break;
         }
@@ -824,11 +797,7 @@ public void DB_QueuePartyMembers(Database db, DBResultSet results, const char[] 
     {
         char waitQuery[512];
         g_hDB.Format(waitQuery, sizeof(waitQuery),
-            "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) "
-            "FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id "
-            "WHERE q.status IN ('matched','ready_check') "
-            "  AND ABS(q.elo - %d) <= 300 "
-            "  AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
+            "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id WHERE q.status IN ('matched','ready_check') AND ABS(q.elo - %d) <= 300 AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
             g_iElo[leader]);
         g_hDB.Query(DB_WaitTimeEstimate, waitQuery, GetClientUserId(leader), DBPrio_Normal);
     }
@@ -870,14 +839,7 @@ public Action Cmd_Leave(int client, int args)
     // Also cancel all party members' queue entries (no-op if not in a party)
     char partyCancel[768];
     g_hDB.Format(partyCancel, sizeof(partyCancel),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE status IN ('waiting','ready_check') "
-        "AND steam_id IN ("
-        "  SELECT steam_id FROM mm_party_members "
-        "  WHERE party_id = ("
-        "    SELECT party_id FROM mm_party_members WHERE steam_id='%s' LIMIT 1"
-        "  )"
-        ")",
+        "UPDATE mm_queue SET status='cancelled' WHERE status IN ('waiting','ready_check') AND steam_id IN (SELECT steam_id FROM mm_party_members WHERE party_id = (SELECT party_id FROM mm_party_members WHERE steam_id='%s' LIMIT 1))",
         steamID);
     g_hDB.Query(DB_GenericCallback, partyCancel, _, DBPrio_High);
 
@@ -924,11 +886,7 @@ public Action Cmd_Status(int client, int args)
     // Estimated wait time for this ELO bracket
     char waitQuery[512];
     g_hDB.Format(waitQuery, sizeof(waitQuery),
-        "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) "
-        "FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id "
-        "WHERE q.status IN ('matched','ready_check') "
-        "  AND ABS(q.elo - %d) <= 300 "
-        "  AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
+        "SELECT AVG(TIMESTAMPDIFF(SECOND, q.queued_at, m.started_at)) FROM mm_queue q JOIN mm_matches m ON m.id = q.match_id WHERE q.status IN ('matched','ready_check') AND ABS(q.elo - %d) <= 300 AND q.queued_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)",
         g_iElo[client]);
     g_hDB.Query(DB_WaitTimeEstimate, waitQuery, GetClientUserId(client), DBPrio_Normal);
 
@@ -937,17 +895,7 @@ public Action Cmd_Status(int client, int args)
     MM_GetSteamID(client, steamID, sizeof(steamID));
     char posQuery[768];
     g_hDB.Format(posQuery, sizeof(posQuery),
-        "SELECT "
-        "  (SELECT COUNT(*) FROM mm_queue "
-        "   WHERE status='waiting' AND elo BETWEEN %d-300 AND %d+300 "
-        "   AND queued_at < IFNULL("
-        "     (SELECT queued_at FROM mm_queue WHERE steam_id='%s' AND status='waiting' LIMIT 1),"
-        "     NOW()"
-        "   )"
-        "  ) AS pos_count, "
-        "  COUNT(*) AS bracket_count "
-        "FROM mm_queue "
-        "WHERE status='waiting' AND elo BETWEEN %d-300 AND %d+300",
+        "SELECT (SELECT COUNT(*) FROM mm_queue WHERE status='waiting' AND elo BETWEEN %d-300 AND %d+300 AND queued_at < IFNULL((SELECT queued_at FROM mm_queue WHERE steam_id='%s' AND status='waiting' LIMIT 1), NOW())) AS pos_count, COUNT(*) AS bracket_count FROM mm_queue WHERE status='waiting' AND elo BETWEEN %d-300 AND %d+300",
         g_iElo[client], g_iElo[client], steamID,
         g_iElo[client], g_iElo[client]);
     g_hDB.Query(DB_StatusQueuePosition, posQuery, GetClientUserId(client), DBPrio_Normal);
@@ -1560,14 +1508,7 @@ void ReadyCheck_Decline(int client)
     // Cancel all party members' ready-check entries (no-op if not in a party)
     char partyCancel[768];
     g_hDB.Format(partyCancel, sizeof(partyCancel),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE status='ready_check' "
-        "AND steam_id IN ("
-        "  SELECT steam_id FROM mm_party_members "
-        "  WHERE party_id = ("
-        "    SELECT party_id FROM mm_party_members WHERE steam_id='%s' LIMIT 1"
-        "  )"
-        ")",
+        "UPDATE mm_queue SET status='cancelled' WHERE status='ready_check' AND steam_id IN (SELECT steam_id FROM mm_party_members WHERE party_id = (SELECT party_id FROM mm_party_members WHERE steam_id='%s' LIMIT 1))",
         steamID);
     g_hDB.Query(DB_GenericCallback, partyCancel, _, DBPrio_High);
 
@@ -1697,12 +1638,7 @@ public Action Cmd_LastMatch(int client, int args)
 
     char query[768];
     g_hDB.Format(query, sizeof(query),
-        "SELECT m.map_name, m.team1_score, m.team2_score, m.winner, "
-        "       mp.team, mp.kills, mp.deaths, mp.assists, mp.elo_change "
-        "FROM mm_match_players mp "
-        "JOIN mm_matches m ON m.id = mp.match_id "
-        "WHERE mp.steam_id = '%s' AND m.status = 'finished' "
-        "ORDER BY m.ended_at DESC LIMIT 1",
+        "SELECT m.map_name, m.team1_score, m.team2_score, m.winner, mp.team, mp.kills, mp.deaths, mp.assists, mp.elo_change FROM mm_match_players mp JOIN mm_matches m ON m.id = mp.match_id WHERE mp.steam_id = '%s' AND m.status = 'finished' ORDER BY m.ended_at DESC LIMIT 1",
         steamID);
     g_hDB.Query(DB_LastMatchResult, query, GetClientUserId(client), DBPrio_Normal);
 
@@ -1763,8 +1699,7 @@ public void DB_LastMatchResult(Database db, DBResultSet results, const char[] er
     }
 
     MM_PrintToChat(client,
-        "[MM] Last match on \x04%s\x01 — \x09%d\x01-\x09%d\x01 (\x04%s\x01) | "
-        "\x04%dK\x01/\x07%dD\x01/\x04%dA\x01 | ELO: \x09%s",
+        "[MM] Last match on \x04%s\x01 — \x09%d\x01-\x09%d\x01 (\x04%s\x01) | \x04%dK\x01/\x07%dD\x01/\x04%dA\x01 | ELO: \x09%s",
         mapName, myScore, theirScore, resultStr, kills, deaths, assists, eloStr);
 }
 
@@ -1794,14 +1729,7 @@ public Action Cmd_Recent(int client, int args)
 
     char query[1024];
     Format(query, sizeof(query),
-        "SELECT p.name, p.rank_tier, mp2.kills, mp2.deaths, mp2.team, "
-        "m.winner, m.ended_at "
-        "FROM mm_match_players mp1 "
-        "JOIN mm_matches m ON m.id = mp1.match_id "
-        "JOIN mm_match_players mp2 ON mp2.match_id = mp1.match_id AND mp2.steam_id != '%s' "
-        "JOIN mm_players p ON p.steam_id = mp2.steam_id "
-        "WHERE mp1.steam_id = '%s' AND m.status = 'finished' "
-        "ORDER BY m.ended_at DESC LIMIT 5",
+        "SELECT p.name, p.rank_tier, mp2.kills, mp2.deaths, mp2.team, m.winner, m.ended_at FROM mm_match_players mp1 JOIN mm_matches m ON m.id = mp1.match_id JOIN mm_match_players mp2 ON mp2.match_id = mp1.match_id AND mp2.steam_id != '%s' JOIN mm_players p ON p.steam_id = mp2.steam_id WHERE mp1.steam_id = '%s' AND m.status = 'finished' ORDER BY m.ended_at DESC LIMIT 5",
         escapedSID, escapedSID);
 
     DataPack pack = new DataPack();
@@ -1932,8 +1860,7 @@ public Action Cmd_Avoid(int client, int args)
 
     char countQuery[256];
     Format(countQuery, sizeof(countQuery),
-        "SELECT COUNT(*) AS cnt FROM mm_avoid_list "
-        "WHERE steam_id = '%s' AND expires_at > NOW()",
+        "SELECT COUNT(*) AS cnt FROM mm_avoid_list WHERE steam_id = '%s' AND expires_at > NOW()",
         escMy);
     g_hDB.Query(DB_AvoidCountCheck, countQuery, pack, DBPrio_Normal);
 
@@ -1968,9 +1895,7 @@ public void DB_AvoidCountCheck(Database db, DBResultSet results, const char[] er
 
     char query[512];
     Format(query, sizeof(query),
-        "INSERT INTO mm_avoid_list (steam_id, avoided_id, expires_at) "
-        "VALUES ('%s', '%s', DATE_ADD(NOW(), INTERVAL 7 DAY)) "
-        "ON DUPLICATE KEY UPDATE expires_at = DATE_ADD(NOW(), INTERVAL 7 DAY)",
+        "INSERT INTO mm_avoid_list (steam_id, avoided_id, expires_at) VALUES ('%s', '%s', DATE_ADD(NOW(), INTERVAL 7 DAY)) ON DUPLICATE KEY UPDATE expires_at = DATE_ADD(NOW(), INTERVAL 7 DAY)",
         escMy, escTarget);
     g_hDB.Query(DB_GenericCallback, query, _, DBPrio_Normal);
 
@@ -1999,11 +1924,7 @@ public Action Cmd_AvoidList(int client, int args)
 
     char query[512];
     Format(query, sizeof(query),
-        "SELECT COALESCE(p.name, al.avoided_id), al.expires_at "
-        "FROM mm_avoid_list al "
-        "LEFT JOIN mm_players p ON p.steam_id = al.avoided_id "
-        "WHERE al.steam_id = '%s' AND al.expires_at > NOW() "
-        "ORDER BY al.expires_at ASC LIMIT 10",
+        "SELECT COALESCE(p.name, al.avoided_id), al.expires_at FROM mm_avoid_list al LEFT JOIN mm_players p ON p.steam_id = al.avoided_id WHERE al.steam_id = '%s' AND al.expires_at > NOW() ORDER BY al.expires_at ASC LIMIT 10",
         escapedSID);
 
     DataPack pack = new DataPack();

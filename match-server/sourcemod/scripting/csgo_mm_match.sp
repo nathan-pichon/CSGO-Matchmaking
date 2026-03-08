@@ -1698,8 +1698,7 @@ public int Menu_ReportReasonHandler(Menu menu, MenuAction action, int client, in
 
             char query[512];
             Format(query, sizeof(query),
-                "INSERT IGNORE INTO mm_reports (reporter_id, reported_id, match_id, reason) "
-                "VALUES ('%s', '%s', %d, '%s')",
+                "INSERT IGNORE INTO mm_reports (reporter_id, reported_id, match_id, reason) VALUES ('%s', '%s', %d, '%s')",
                 escReporter, escReported, g_iMatchId, escReason);
             g_hDB.Query(CB_GenericQuery, query);
 

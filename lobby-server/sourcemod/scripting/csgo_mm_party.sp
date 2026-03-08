@@ -113,20 +113,14 @@ public void OnClientPostAdminCheck(int client)
     // Load party membership, leader status, and ELO in one query
     char query[768];
     g_hDB.Format(query, sizeof(query),
-        "SELECT pm.party_id, (p.leader_id = '%s') AS is_leader, pl.elo "
-        "FROM mm_party_members pm "
-        "JOIN mm_parties p  ON p.id         = pm.party_id "
-        "JOIN mm_players pl ON pl.steam_id  = pm.steam_id "
-        "WHERE pm.steam_id = '%s' LIMIT 1",
+        "SELECT pm.party_id, (p.leader_id = '%s') AS is_leader, pl.elo FROM mm_party_members pm JOIN mm_parties p ON p.id = pm.party_id JOIN mm_players pl ON pl.steam_id = pm.steam_id WHERE pm.steam_id = '%s' LIMIT 1",
         steamID, steamID);
     g_hDB.Query(DB_LoadPartyState, query, GetClientUserId(client), DBPrio_Normal);
 
     // Check for a pending invite
     char invQuery[512];
     g_hDB.Format(invQuery, sizeof(invQuery),
-        "SELECT party_id FROM mm_party_invites "
-        "WHERE invitee_id = '%s' AND expires_at > NOW() "
-        "ORDER BY invited_at DESC LIMIT 1",
+        "SELECT party_id FROM mm_party_invites WHERE invitee_id = '%s' AND expires_at > NOW() ORDER BY invited_at DESC LIMIT 1",
         steamID);
     g_hDB.Query(DB_LoadPendingInvite, invQuery, GetClientUserId(client), DBPrio_Normal);
 }
@@ -343,17 +337,14 @@ void Party_Invite(int client, const char[] targetName)
     {
         // Party exists — check size
         g_hDB.Format(query, sizeof(query),
-            "SELECT id, leader_id, "
-            "(SELECT COUNT(*) FROM mm_party_members WHERE party_id=%d) AS member_count "
-            "FROM mm_parties WHERE id=%d LIMIT 1",
+            "SELECT id, leader_id, (SELECT COUNT(*) FROM mm_party_members WHERE party_id=%d) AS member_count FROM mm_parties WHERE id=%d LIMIT 1",
             g_iPartyId[client], g_iPartyId[client]);
     }
     else
     {
         // No party yet — return 0 rows to signal "create new"
         g_hDB.Format(query, sizeof(query),
-            "SELECT NULL AS id, NULL AS leader_id, 0 AS member_count "
-            "FROM DUAL WHERE 1=0");
+            "SELECT NULL AS id, NULL AS leader_id, 0 AS member_count FROM DUAL WHERE 1=0");
     }
     g_hDB.Query(DB_InviteCheckParty, query, pack, DBPrio_High);
 }
@@ -472,11 +463,7 @@ void DoSendInvite(int inviterUserId, int targetUserId,
     // Insert or refresh invite
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "INSERT INTO mm_party_invites (party_id, invitee_id, expires_at) "
-        "VALUES (%d, '%s', DATE_ADD(NOW(), INTERVAL %d SECOND)) "
-        "ON DUPLICATE KEY UPDATE "
-        "  invited_at = NOW(), "
-        "  expires_at = DATE_ADD(NOW(), INTERVAL %d SECOND)",
+        "INSERT INTO mm_party_invites (party_id, invitee_id, expires_at) VALUES (%d, '%s', DATE_ADD(NOW(), INTERVAL %d SECOND)) ON DUPLICATE KEY UPDATE invited_at = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL %d SECOND)",
         partyId, targetSteamID, INVITE_EXPIRE_SEC, INVITE_EXPIRE_SEC);
     g_hDB.Query(DB_GenericCallback, query, _, DBPrio_High);
 
@@ -492,8 +479,7 @@ void DoSendInvite(int inviterUserId, int targetUserId,
             strcopy(inviterName, sizeof(inviterName), "A player");
 
         MM_PrintToChat(target,
-            "\x04%s\x01 invited you to their party! "
-            "Type \x04!party accept\x01 or \x09!party decline\x01. (Expires in \x09%ds\x01)",
+            "\x04%s\x01 invited you to their party! Type \x04!party accept\x01 or \x09!party decline\x01. (Expires in \x09%ds\x01)",
             inviterName, INVITE_EXPIRE_SEC);
     }
 
@@ -540,10 +526,7 @@ void Party_Accept(int client)
     // Verify invite still valid and party not full
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT "
-        "  (SELECT COUNT(*) FROM mm_party_invites "
-        "   WHERE party_id=%d AND invitee_id='%s' AND expires_at > NOW()) AS invite_valid, "
-        "  (SELECT COUNT(*) FROM mm_party_members WHERE party_id=%d) AS member_count",
+        "SELECT (SELECT COUNT(*) FROM mm_party_invites WHERE party_id=%d AND invitee_id='%s' AND expires_at > NOW()) AS invite_valid, (SELECT COUNT(*) FROM mm_party_members WHERE party_id=%d) AS member_count",
         partyId, steamID, partyId);
     g_hDB.Query(DB_AcceptVerify, query, pack, DBPrio_High);
 }
@@ -746,11 +729,7 @@ void HandlePartyLeave(int client, bool disconnect)
     // Cancel all party members' queue entries (harmless if not queued)
     char cancelQuery[512];
     g_hDB.Format(cancelQuery, sizeof(cancelQuery),
-        "UPDATE mm_queue SET status='cancelled' "
-        "WHERE status IN ('waiting','ready_check') "
-        "AND steam_id IN ("
-        "  SELECT steam_id FROM mm_party_members WHERE party_id=%d"
-        ")",
+        "UPDATE mm_queue SET status='cancelled' WHERE status IN ('waiting','ready_check') AND steam_id IN (SELECT steam_id FROM mm_party_members WHERE party_id=%d)",
         partyId);
     g_hDB.Query(DB_GenericCallback, cancelQuery, _, DBPrio_High);
 
@@ -788,8 +767,7 @@ void HandlePartyLeave(int client, bool disconnect)
 
         char leaderQuery[256];
         g_hDB.Format(leaderQuery, sizeof(leaderQuery),
-            "SELECT steam_id FROM mm_party_members WHERE party_id=%d "
-            "ORDER BY joined_at ASC LIMIT 1",
+            "SELECT steam_id FROM mm_party_members WHERE party_id=%d ORDER BY joined_at ASC LIMIT 1",
             partyId);
         g_hDB.Query(DB_TransferLeadership, leaderQuery, pack, DBPrio_High);
     }
@@ -925,8 +903,7 @@ void Party_Kick(int client, const char[] targetName)
     // Cancel kicked player's queue entry
     char cancelQuery[256];
     g_hDB.Format(cancelQuery, sizeof(cancelQuery),
-        "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' "
-        "AND status IN ('waiting','ready_check')",
+        "UPDATE mm_queue SET status='cancelled' WHERE steam_id='%s' AND status IN ('waiting','ready_check')",
         targetSteamID);
     g_hDB.Query(DB_GenericCallback, cancelQuery, _, DBPrio_High);
 
@@ -967,13 +944,7 @@ void Party_ShowList(int client)
 
     char query[512];
     g_hDB.Format(query, sizeof(query),
-        "SELECT pl.name, pl.elo, pl.rank_tier, "
-        "       (p.leader_id = pm.steam_id) AS is_leader "
-        "FROM mm_party_members pm "
-        "JOIN mm_players pl ON pl.steam_id = pm.steam_id "
-        "JOIN mm_parties p  ON p.id        = pm.party_id "
-        "WHERE pm.party_id = %d "
-        "ORDER BY pm.joined_at ASC",
+        "SELECT pl.name, pl.elo, pl.rank_tier, (p.leader_id = pm.steam_id) AS is_leader FROM mm_party_members pm JOIN mm_players pl ON pl.steam_id = pm.steam_id JOIN mm_parties p ON p.id = pm.party_id WHERE pm.party_id = %d ORDER BY pm.joined_at ASC",
         g_iPartyId[client]);
     g_hDB.Query(DB_PartyList, query, pack, DBPrio_Normal);
 }
@@ -1052,8 +1023,7 @@ public Action Timer_CleanupInvites(Handle timer)
 
         char query[512];
         g_hDB.Format(query, sizeof(query),
-            "SELECT id FROM mm_party_invites "
-            "WHERE party_id=%d AND invitee_id='%s' AND expires_at > NOW() LIMIT 1",
+            "SELECT id FROM mm_party_invites WHERE party_id=%d AND invitee_id='%s' AND expires_at > NOW() LIMIT 1",
             g_iPendingInviteParty[i], steamID);
         g_hDB.Query(DB_InviteExpired, query, pack, DBPrio_Low);
     }
