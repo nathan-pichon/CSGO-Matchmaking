@@ -275,9 +275,22 @@ LIMIT 10;
 **Active bans:**
 
 ```sql
-SELECT steam_id, reason, expires_at
-FROM mm_bans
-WHERE is_active = 1;
+SELECT b.steam_id, p.name, b.reason, b.banned_by, b.created_at, b.expires_at
+FROM mm_bans b
+LEFT JOIN mm_players p ON p.steam_id = b.steam_id
+WHERE b.expires_at > NOW() OR b.expires_at IS NULL
+ORDER BY b.created_at DESC;
+```
+
+> **Note:** Bans are soft-deleted when lifted from the admin panel — `expires_at` is set to `NOW()` and `unbanned_by` / `unbanned_at` are recorded. To see the full ban history including lifted bans, omit the `WHERE` clause.
+
+**Recent admin actions (activity log):**
+
+```sql
+SELECT l.created_at, l.admin_id, l.action, l.target_type, l.target_id, l.detail
+FROM mm_admin_log l
+ORDER BY l.created_at DESC
+LIMIT 50;
 ```
 
 **Clean up old queue entries:**

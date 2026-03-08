@@ -307,26 +307,107 @@ JSON endpoints for external integrations (Discord bots, dashboards):
 
 | Role | Permissions |
 |------|-------------|
-| `moderator` | View dashboard, manage bans, dismiss reports |
-| `admin` | All moderator actions + override player ELO |
-| `superadmin` | All admin actions + manage admins, manage seasons |
+| `moderator` | Dashboard, queue monitor, bans, reports, server broadcast, player search |
+| `admin` | All moderator actions + cancel matches, override ELO, manage map pool, activity log |
+| `superadmin` | All admin actions + manage admins, manage seasons, delete maps |
 
 ### Admin pages
 
 | URL | Role required | Description |
 |-----|---------------|-------------|
-| `/admin/` | moderator+ | Live dashboard: active matches, queue count, ban count |
-| `/admin/bans` | moderator+ | View, issue, and remove matchmaking bans |
-| `/admin/reports` | moderator+ | Review player reports (3+ unique reporters in 30 days) |
-| `/admin/setelo` | admin+ | Manually override a player's ELO rating |
-| `/admin/admins` | superadmin | Add, remove, and change admin roles |
+| `/admin/` | moderator+ | Dashboard — 8 live stat cards + navigation tile grid + active match quick view |
+| `/admin/queue` | moderator+ | Live queue monitor: all active entries with wait times; kick any player |
+| `/admin/servers` | moderator+ | Lobby stats, active match servers; RCON broadcast to lobby or any match |
+| `/admin/matches` | moderator+ | All matches (all statuses), filterable by status; cancel or force-cleanup |
+| `/admin/players` | moderator+ | Player search with tabs (all / banned / abandon history / flagged); quick-ban, kick from queue |
+| `/admin/bans` | moderator+ | Issue bans with duration presets; soft-delete unban (history preserved); recent unbans log |
+| `/admin/reports` | moderator+ | Players flagged by ≥ 3 reporters in 30 days; drill-down to individual reports |
+| `/admin/reports/<id>` | moderator+ | Per-reporter detail view for a flagged player with quick-ban modal |
+| `/admin/setelo` | admin+ | Manually override a player's ELO (also available via player profile and player management) |
+| `/admin/maps` | admin+ | Map pool CRUD — toggle active state, adjust selection weight, add or remove maps |
+| `/admin/log` | admin+ | Paginated activity log of every admin write action, filterable by admin and action type |
+| `/admin/admins` | superadmin | Add, remove, and change roles for admin accounts |
 | `/admin/seasons` | superadmin | Start a new competitive season with soft ELO reset |
 
-### Ban management
+### Dashboard
 
-- Ban by Steam ID (`STEAM_0:X:Y`) with a reason and duration in minutes (`0` = permanent)
-- Unban immediately from the same page
-- The system also issues **automatic bans** for match abandonment (progressive: 30 min → 2h → 24h → 7 days → 30 days)
+The dashboard gives an at-a-glance view of server health:
+
+- **Live matches** — count of active game servers (creating / warmup / live / overtime)
+- **Players in queue** — current waiting count
+- **Active bans** — players currently matchmaking-banned
+- **Flagged players** — players with 3+ unique reports awaiting review
+- **Total players / Total matches** — lifetime stats with today's delta
+- **Free ports / Free GSLT tokens** — resource availability (turns yellow at 0 — time to provision more)
+
+A navigation grid below the stat cards gives one-click access to every admin section.
+
+### Queue monitor (`/admin/queue`)
+
+Shows every player currently in `waiting`, `ready_check`, or `matched` state with:
+- Player name (links to profile), Steam ID, ELO, rank tier
+- Status badge, map preference, originating lobby server, and elapsed wait time
+- **Kick** button to cancel an entry immediately (logged to activity log)
+
+The page auto-refreshes every 15 seconds.
+
+### Server management (`/admin/servers`)
+
+**Lobby broadcast** — type a message and it is sent via RCON to all players on the lobby server (`sm_say`).
+
+**Match server table** — every active match server with its IP:port, score, Docker container ID, and uptime. Per-server actions:
+- **Say** — open a modal and type a message to broadcast to that match only
+- **Cancel** — force the match into `cancelled` state (admin+ role required)
+
+Resource counters at the top show free ports and free GSLT tokens so you can quickly see if you need to provision more.
+
+### Player management (`/admin/players`)
+
+- **Search** by player name or Steam ID
+- **Tabs**: All · Banned · Abandon history · Flagged (3+ reports)
+- Per-row quick actions (all open inline modals — no page navigation needed):
+  - **Ban** with duration presets (30 min / 2 h / 1 day / 7 days / 30 days / permanent) and custom reason
+  - **Unban** for currently banned players
+  - **Kick queue** — cancel their active queue entry
+  - **Set ELO** — override rating (admin+ only)
+- Report count links directly to `/admin/reports/<steam_id>` when ≥ 3
+
+### Player profile admin overlay
+
+When an admin views any public player profile (`/player/<steam_id>`), a golden **⚙ Admin panel** strip appears at the top of the page showing:
+- Ban status, abandon count, report count (last 30 days), current queue status
+- Quick-ban / unban / kick from queue / set ELO actions — all inline, no separate admin page needed
+
+### Ban management (`/admin/bans`)
+
+- Issue a ban by Steam ID with a reason and duration (minutes; `0` = permanent)
+- **Duration presets**: 30 min, 2 h, 1 day, 7 days, 30 days, permanent
+- **Unban is a soft-delete** — the ban row is preserved (`expires_at = NOW()`) with `unbanned_by` and `unbanned_at` recorded. History is never lost.
+- A **Recent Unbans** section shows the last 20 unbans in the past 7 days
+- Automatic bans issued by the system for match abandonment (progressive: 30 min → 2h → 24h → 7 days → 30 days) appear here and can be manually lifted
+
+### Report management (`/admin/reports`)
+
+Players flagged by **3 or more unique reporters** in the last 30 days are listed here:
+- Reporter count highlighted in orange (≥ 3) or red (≥ 5)
+- **Details** — drill into `/admin/reports/<steam_id>` for a full per-report table (reporter, match, reason, notes) with a quick-ban modal
+- **Dismiss** — marks all pending reports for that player as reviewed
+
+### Map pool (`/admin/maps`)
+
+- Toggle any map between active / inactive without deleting it
+- Set a **weight** (1–10) to influence how often the map appears in the in-game vote (higher = more frequent)
+- Add new maps (internal name + display name)
+- Delete maps (superadmin only)
+
+### Activity log (`/admin/log`)
+
+Every admin write action is recorded in `mm_admin_log` with:
+- Timestamp, admin name (linked to profile), action type, target type + ID, human-readable detail
+- Filter by specific admin or action keyword
+- Paginated (50 entries per page)
+
+Actions logged: `ban`, `unban`, `set_elo`, `queue_kick`, `cancel_match`, `cleanup_match`, `server_say`, `lobby_say`, `map_toggle`, `map_weight`, `map_add`, `map_delete`, `admin_add`, `admin_remove`, `admin_role`, `report_dismiss`, `season_new`, `player_kick_queue`
 
 ---
 
