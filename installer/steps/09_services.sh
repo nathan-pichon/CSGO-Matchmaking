@@ -106,14 +106,25 @@ _configure_firewall() {
 
     elif command -v iptables &>/dev/null; then
         info "Configuring iptables rules..."
-        iptables -I INPUT -p udp --dport "${LOBBY_PORT}" -j ACCEPT 2>/dev/null || true
-        iptables -I INPUT -p tcp --dport "${LOBBY_PORT}" -j ACCEPT 2>/dev/null || true
-        iptables -I INPUT -p tcp --dport "${WEB_PORT}"   -j ACCEPT 2>/dev/null || true
+        # Use -C (check) before -A (append) to avoid duplicate rules on retries
+        _ipt_allow() {
+            local proto="$1" port="$2"
+            iptables -C INPUT -p "${proto}" --dport "${port}" -j ACCEPT 2>/dev/null \
+                || iptables -A INPUT -p "${proto}" --dport "${port}" -j ACCEPT 2>/dev/null \
+                || true
+        }
+        _ipt_allow udp "${LOBBY_PORT}"
+        _ipt_allow tcp "${LOBBY_PORT}"
+        _ipt_allow tcp "${WEB_PORT}"
         if (( MATCH_SLOTS > 0 )); then
-            iptables -I INPUT -p udp \
-                --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
-            iptables -I INPUT -p tcp \
-                --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
+            iptables -C INPUT -p udp \
+                    --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null \
+                || iptables -A INPUT -p udp \
+                    --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
+            iptables -C INPUT -p tcp \
+                    --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null \
+                || iptables -A INPUT -p tcp \
+                    --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
         fi
         ok "iptables rules added (lobby: ${LOBBY_PORT}, web: ${WEB_PORT}, match: ${MATCH_PORT_START}-${match_port_end})"
         warn "iptables rules are not persistent. Install 'iptables-persistent' to keep them across reboots."

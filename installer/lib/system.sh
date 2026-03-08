@@ -97,8 +97,18 @@ _perform_rollback() {
     ok "Rollback complete."
 }
 
-trap '_cleanup' EXIT
+trap '_cleanup'                          EXIT
 trap '_error_handler ${LINENO} "$BASH_COMMAND"' ERR
+trap '_sigint_handler'                   SIGINT SIGTERM
+
+_sigint_handler() {
+    printf '\n\n'
+    warn "Installation interrupted by user (Ctrl+C / SIGTERM)."
+    _offer_rollback
+    # Reset the signal to default so the script exits normally
+    trap - SIGINT SIGTERM
+    exit 130
+}
 
 # ── Prerequisite checks ────────────────────────────────────────────────────────
 
@@ -298,4 +308,134 @@ check_requirements() {
     fi
 
     ok "System requirements check passed"
+}
+
+# ── Cloud provider detection ────────────────────────────────────────────────────
+
+# detect_cloud_provider
+# Probes well-known instance metadata endpoints to identify the hosting provider.
+# Prints one of: aws | gcp | azure | ovh | hetzner | digitalocean | bare-metal
+detect_cloud_provider() {
+    # AWS — IMDSv1 (no token required, fast)
+    if curl -sf --max-time 2 \
+            http://169.254.169.254/latest/meta-data/instance-id &>/dev/null; then
+        echo "aws"; return 0
+    fi
+    # GCP — requires Metadata-Flavor header
+    if curl -sf --max-time 2 \
+            -H "Metadata-Flavor: Google" \
+            http://metadata.google.internal/computeMetadata/v1/instance/id \
+            &>/dev/null; then
+        echo "gcp"; return 0
+    fi
+    # Azure — IMDS (requires Metadata: true header)
+    if curl -sf --max-time 2 \
+            -H "Metadata: true" \
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01" \
+            &>/dev/null; then
+        echo "azure"; return 0
+    fi
+    # Hetzner Cloud — vendor file
+    if [[ -f /etc/hetzner-cloud ]] \
+            || grep -qi "hetzner" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        echo "hetzner"; return 0
+    fi
+    # DigitalOcean — vendor ID
+    if grep -qi "digitalocean" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        echo "digitalocean"; return 0
+    fi
+    # OVH / Bare-metal — no standard metadata endpoint; check vendor string
+    if grep -qi "ovh" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+        echo "ovh"; return 0
+    fi
+    echo "bare-metal"
+}
+
+# show_cloud_firewall_notice <provider> <lobby_port> <web_port> <match_start> <match_end>
+# Prints a provider-specific reminder to open ports in the cloud console.
+show_cloud_firewall_notice() {
+    local provider="$1"
+    local lobby_port="${2:-27015}"
+    local web_port="${3:-5000}"
+    local match_start="${4:-27020}"
+    local match_end="${5:-27029}"
+
+    [[ "${provider}" == "bare-metal" ]] && return 0
+
+    printf '\n'
+    printf '  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${YELLOW}" "${RESET}"
+    printf '  %s⚠  Cloud Provider Detected: %s%s\n' "${YELLOW}" "${provider^^}" "${RESET}"
+    printf '  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n\n' "${YELLOW}" "${RESET}"
+
+    printf '  The installer configures the OS-level firewall (UFW/iptables), but\n'
+    printf '  %s cloud providers also have a separate network-level firewall%s\n' "${BOLD}" "${RESET}"
+    printf '  (Security Groups / NSG) that you must configure in their console.\n\n'
+    printf '  %sYou must open these ports in your %s console:%s\n\n' "${BOLD}" "${provider^^}" "${RESET}"
+    printf '  %-12s %-10s %s\n' "Port(s)" "Protocol" "Service"
+    printf '  %-12s %-10s %s\n' "────────────" "────────" "──────────────────────────"
+    printf '  %-12s %-10s %s\n' "${lobby_port}" "UDP+TCP"  "CS:GO Lobby server"
+    printf '  %-12s %-10s %s\n' "${web_port}"   "TCP"      "Web panel (HTTP)"
+    printf '  %-12s %-10s %s\n' "${match_start}-${match_end}" "UDP+TCP" "Match servers (game + RCON)"
+    printf '\n'
+    printf '  %s⚠  UDP traffic must be allowed — CS:GO game data runs over UDP!%s\n\n' "${YELLOW}" "${RESET}"
+
+    case "${provider}" in
+        aws)
+            printf '  %sAWS — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    EC2 Console → Instances → your instance → Security tab\n'
+            printf '    → Security Groups → Edit Inbound Rules\n'
+            printf '    Add rules: Custom UDP / Custom TCP for each port range.\n'
+            printf '    Docs: %shttps://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sRecommended EC2 instance types for production:%s\n' "${BOLD}" "${RESET}"
+            printf '    c5.xlarge (4 vCPU, 8GB RAM)  — up to 5 simultaneous matches\n'
+            printf '    c5.2xlarge (8 vCPU, 16GB RAM) — up to 10 simultaneous matches\n\n'
+            ;;
+        gcp)
+            printf '  %sGoogle Cloud — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    VPC Network → Firewall → Create Firewall Rule\n'
+            printf '    Direction: Ingress | Action: Allow | Protocols: tcp/udp | Ports: all above\n'
+            printf '    Docs: %shttps://cloud.google.com/vpc/docs/using-firewalls%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sRecommended GCP instance types for production:%s\n' "${BOLD}" "${RESET}"
+            printf '    n2-standard-4 (4 vCPU, 16GB RAM) — general purpose\n'
+            printf '    c2-standard-4 (4 vCPU, 16GB RAM) — compute-optimized (lower latency)\n\n'
+            ;;
+        azure)
+            printf '  %sAzure — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    Portal → Virtual Machines → your VM → Networking\n'
+            printf '    → Add Inbound Port Rule for each port range.\n'
+            printf '    Docs: %shttps://docs.microsoft.com/azure/virtual-machines/windows/nsg-quickstart-portal%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sRecommended Azure VM sizes for production:%s\n' "${BOLD}" "${RESET}"
+            printf '    D4s_v5 (4 vCPU, 16GB RAM) or F4s_v2 (4 vCPU, 8GB, compute-optimized)\n\n'
+            ;;
+        hetzner)
+            printf '  %sHetzner — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    Cloud Console → Firewalls → Create Firewall\n'
+            printf '    Add Inbound rules for TCP and UDP on the port ranges above.\n'
+            printf '    Apply the firewall to your server.\n'
+            printf '    Docs: %shttps://docs.hetzner.com/cloud/firewalls/getting-started/creating-a-firewall/%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sRecommended Hetzner server for production:%s\n' "${BOLD}" "${RESET}"
+            printf '    CPX31 (4 vCPU, 8GB RAM) or CPX41 (8 vCPU, 16GB RAM)\n\n'
+            ;;
+        digitalocean)
+            printf '  %sDigitalOcean — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    Control Panel → Networking → Firewalls → Create Firewall\n'
+            printf '    Add Inbound rules: Custom TCP/UDP for each port range.\n'
+            printf '    Docs: %shttps://docs.digitalocean.com/products/networking/firewalls/%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sRecommended Droplet for production:%s\n' "${BOLD}" "${RESET}"
+            printf '    General Purpose 8GB+ (4 vCPU) for up to 10 match slots\n\n'
+            ;;
+        ovh)
+            printf '  %sOVH — Where to open ports:%s\n' "${BOLD}" "${RESET}"
+            printf '    OVH Manager → Bare Metal Cloud → your server\n'
+            printf '    Network → Firewall → Add a rule for each port.\n'
+            printf '    Docs: %shttps://help.ovhcloud.com/csm/en-dedicated-servers-firewall-network%s\n\n' "${CYAN}" "${RESET}"
+            printf '  %sNote about OVH Game servers:%s\n' "${BOLD}" "${RESET}"
+            printf '    OVH Game servers include DDoS protection tuned for CS:GO.\n'
+            printf '    Recommended: OVH Bare Metal Game or Rise series (8+ cores, 32GB+ RAM)\n\n'
+            ;;
+    esac
+
+    printf '  %sIMPORTANT: Open these ports BEFORE players try to connect.%s\n' "${YELLOW}" "${RESET}"
+    printf '  Players will see "Connection timed out" if UDP ports are blocked.\n'
+    printf '\n'
 }

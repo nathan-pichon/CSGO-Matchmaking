@@ -7,16 +7,17 @@ This guide walks you through installing and configuring the full CS:GO Matchmaki
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Installation](#2-installation)
-3. [What the Installer Does](#3-what-the-installer-does)
-4. [Post-Install Configuration](#4-post-install-configuration)
-5. [Starting & Stopping Services](#5-starting--stopping-services)
-6. [Web Panel](#6-web-panel)
-7. [Admin Panel](#7-admin-panel)
-8. [In-Game Commands](#8-in-game-commands)
-9. [Configuration Reference](#9-configuration-reference)
-10. [Updating](#10-updating)
-11. [Troubleshooting](#11-troubleshooting)
+2. [Cloud Provider Setup](#2-cloud-provider-setup)
+3. [Installation](#3-installation)
+4. [What the Installer Does](#4-what-the-installer-does)
+5. [Post-Install Configuration](#5-post-install-configuration)
+6. [Starting & Stopping Services](#6-starting--stopping-services)
+7. [Web Panel](#7-web-panel)
+8. [Admin Panel](#8-admin-panel)
+9. [In-Game Commands](#9-in-game-commands)
+10. [Configuration Reference](#10-configuration-reference)
+11. [Updating](#11-updating)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -49,7 +50,171 @@ Before running the installer you need:
 
 ---
 
-## 2. Installation
+## 2. Cloud Provider Setup
+
+If you are renting a VPS or bare-metal server from a cloud provider, you **must** open the game ports in the provider's network-level firewall **before** players can connect. This is separate from the OS firewall (UFW/iptables) that the installer configures automatically.
+
+> **The installer detects your cloud provider automatically** and shows you the exact console steps right before it starts installing.
+
+### Ports to open in every provider
+
+| Port(s) | Protocol | Service |
+|---|---|---|
+| 27015 (lobby port) | **UDP + TCP** | CS:GO Lobby server |
+| 5000 (web panel port) | TCP | Web panel (HTTP) |
+| 27020–27029 (match ports) | **UDP + TCP** | Match servers |
+
+> ⚠️ **UDP must be allowed.** CS:GO game traffic is UDP. Players will see *"Connection timed out"* if UDP is blocked even though TCP is open.
+
+---
+
+### AWS (Amazon EC2)
+
+1. **EC2 Console → Instances** → select your instance → **Security** tab
+2. Click the Security Group link → **Edit Inbound Rules**
+3. Add rules:
+   - **Custom UDP** — Port range `27015` — Source `0.0.0.0/0`
+   - **Custom TCP** — Port range `27015` — Source `0.0.0.0/0`
+   - **Custom TCP** — Port range `5000` — Source `0.0.0.0/0`
+   - **Custom UDP** — Port range `27020-27029` — Source `0.0.0.0/0`
+   - **Custom TCP** — Port range `27020-27029` — Source `0.0.0.0/0`
+4. **Save rules**
+
+**Recommended instance types:**
+
+| Slots | Instance | vCPU | RAM |
+|---|---|---|---|
+| Up to 5 matches | `c5.xlarge` | 4 | 8 GB |
+| Up to 10 matches | `c5.2xlarge` | 8 | 16 GB |
+
+---
+
+### Google Cloud Platform (GCP)
+
+1. **VPC Network → Firewall → Create Firewall Rule**
+2. Fill in:
+   - **Name:** `csgo-mm-allow`
+   - **Direction:** Ingress
+   - **Action:** Allow
+   - **Targets:** All instances in the network
+   - **Source IP ranges:** `0.0.0.0/0`
+   - **Protocols and ports:** Check *Specified protocols and ports*
+     - `tcp: 27015,5000,27020-27029`
+     - `udp: 27015,27020-27029`
+3. **Create**
+
+**Recommended machine types:**
+
+| Slots | Machine type | vCPU | RAM |
+|---|---|---|---|
+| Up to 5 matches | `n2-standard-4` | 4 | 16 GB |
+| Up to 10 matches | `c2-standard-8` | 8 | 32 GB |
+
+---
+
+### Microsoft Azure
+
+1. **Portal → Virtual Machines** → your VM → **Networking**
+2. **Add Inbound Port Rule** (repeat for each):
+   - Priority `100`: Protocol `UDP`, Port `27015`, Action `Allow`
+   - Priority `101`: Protocol `TCP`, Port `27015`, Action `Allow`
+   - Priority `102`: Protocol `TCP`, Port `5000`, Action `Allow`
+   - Priority `103`: Protocol `UDP`, Destination port ranges `27020-27029`, Action `Allow`
+   - Priority `104`: Protocol `TCP`, Destination port ranges `27020-27029`, Action `Allow`
+
+**Recommended VM sizes:**
+
+| Slots | VM Size | vCPU | RAM |
+|---|---|---|---|
+| Up to 5 matches | `D4s_v5` | 4 | 16 GB |
+| Up to 10 matches | `F8s_v2` (compute-optimized) | 8 | 16 GB |
+
+---
+
+### Hetzner Cloud
+
+1. **Cloud Console → Firewalls → Create Firewall**
+2. **Add Inbound Rules:**
+   - `UDP` — Port `27015`
+   - `TCP` — Port `27015`
+   - `TCP` — Port `5000`
+   - `UDP` — Port range `27020-27029`
+   - `TCP` — Port range `27020-27029`
+3. **Apply to Servers** — select your server → **Create Firewall**
+
+**Recommended servers:**
+
+| Slots | Server | vCPU | RAM |
+|---|---|---|---|
+| Up to 5 matches | `CPX31` | 4 | 8 GB |
+| Up to 10 matches | `CPX41` | 8 | 16 GB |
+
+---
+
+### DigitalOcean
+
+1. **Control Panel → Networking → Firewalls → Create Firewall**
+2. **Inbound Rules** → Add:
+   - `UDP` — Ports `27015` — From `All IPv4`
+   - `TCP` — Ports `27015` — From `All IPv4`
+   - `TCP` — Ports `5000` — From `All IPv4`
+   - `UDP` — Ports `27020-27029` — From `All IPv4`
+   - `TCP` — Ports `27020-27029` — From `All IPv4`
+3. Apply to your Droplet
+
+**Recommended Droplets:** General Purpose 8 GB+ (4 vCPU) for up to 10 match slots.
+
+---
+
+### OVH / Bare Metal
+
+OVH's Game servers include built-in **anti-DDoS protection** tuned for game traffic, making them a great choice for CS:GO.
+
+1. **OVH Manager → Bare Metal Cloud → your server**
+2. **Network → Firewall** → Create a rule for each port:
+   - Allow `UDP` port `27015`
+   - Allow `TCP` port `27015`
+   - Allow `TCP` port `5000` (web panel)
+   - Allow `UDP` ports `27020-27029`
+   - Allow `TCP` ports `27020-27029`
+
+**Recommended OVH servers:**
+
+| Slots | Server range | vCPU | RAM |
+|---|---|---|---|
+| Up to 5 matches | Advance 1 / Rise 1 | 4 | 32 GB |
+| Up to 10 matches | Advance 2 / Rise 2 | 8 | 64 GB |
+
+> **Tip:** OVH Game Bare Metal servers (Ryzen series) have extremely low latency and DDoS mitigation — ideal for competitive CS:GO.
+
+---
+
+### Interrupted or failed install — retry safely
+
+If the installer was interrupted (Ctrl+C, network error, etc.):
+
+```bash
+# Always use --update when retrying — it reloads your existing config.env
+# and skips steps that have already completed successfully.
+sudo ./install.sh --update
+```
+
+> **Do NOT run a fresh install** (`option 2` when prompted) after a partial install. This generates new random passwords that won't match the database you already created, causing connection failures.
+
+If the installer is stuck and you want to start completely from scratch:
+
+```bash
+# 1. Rollback the database (you will be prompted for this automatically on Ctrl+C)
+mysql -u root -p -e "DROP DATABASE IF EXISTS csgo_matchmaking; DROP USER IF EXISTS 'csgo_mm'@'localhost';"
+
+# 2. Remove the config backup and run fresh
+rm -f config.env config.env.bak.*
+sudo ./install.sh
+```
+
+---
+
+## 3. Installation
 
 Clone the repository and run the installer as root:
 
@@ -84,7 +249,7 @@ sudo ./install.sh --check    # System requirements check only, no changes made
 
 ---
 
-## 3. What the Installer Does
+## 4. What the Installer Does
 
 The installer runs these steps automatically:
 
@@ -103,7 +268,7 @@ The installer runs these steps automatically:
 
 ---
 
-## 4. Post-Install Configuration
+## 5. Post-Install Configuration
 
 ### Set the super-admin Steam ID
 
@@ -134,7 +299,7 @@ sudo systemctl restart csgo-matchmaker
 
 ---
 
-## 5. Starting & Stopping Services
+## 6. Starting & Stopping Services
 
 All three services are managed by systemd and start automatically on boot.
 
@@ -157,7 +322,7 @@ sudo journalctl -fu csgo-webpanel     # follow web panel logs
 
 ---
 
-## 6. Web Panel
+## 7. Web Panel
 
 The web panel is available at `http://<SERVER_IP>:<WEB_PORT>` (default port `5000`).
 
@@ -188,7 +353,7 @@ After signing in, `/dashboard` shows:
 
 ---
 
-## 7. Admin Panel
+## 8. Admin Panel
 
 ### Gaining access
 
@@ -253,7 +418,7 @@ Start a new competitive season, which:
 
 ---
 
-## 8. In-Game Commands
+## 9. In-Game Commands
 
 Players type these commands in the in-game chat while connected to the **lobby server**.
 
@@ -295,7 +460,7 @@ Players type these commands in the in-game chat while connected to the **lobby s
 
 ---
 
-## 9. Configuration Reference
+## 10. Configuration Reference
 
 All settings live in `config.env` at the project root. After editing, restart the relevant service(s).
 
@@ -346,7 +511,7 @@ DOCKER_NETWORK=host
 
 ---
 
-## 10. Updating
+## 11. Updating
 
 ```bash
 git pull
@@ -363,7 +528,7 @@ sudo systemctl restart csgo-lobby csgo-matchmaker csgo-webpanel
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### Web panel shows "Login" but admin button doesn't appear after signing in
 

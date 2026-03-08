@@ -386,6 +386,16 @@ _wizard_print_summary() {
     printf '  %-35s %s\n' "Super Admin Steam ID:" "${SUPER_ADMIN_STEAM_ID:-(not set — set in config.env)}"
     printf '\n'
 
+    # Detect cloud provider and show firewall reminder before user confirms
+    local cloud_provider
+    info "Detecting hosting environment..."
+    cloud_provider="$(detect_cloud_provider)"
+    if [[ "${cloud_provider}" != "bare-metal" ]]; then
+        local match_port_end=$(( MATCH_PORT_START + MATCH_SLOTS - 1 ))
+        show_cloud_firewall_notice "${cloud_provider}" \
+            "${LOBBY_PORT}" "${WEB_PORT}" "${MATCH_PORT_START}" "${match_port_end}"
+    fi
+
     confirm "Proceed with installation?" \
         || { info "Installation cancelled by user."; exit 0; }
 }
