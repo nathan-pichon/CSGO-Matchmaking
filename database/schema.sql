@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS mm_queue (
   ready           TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1 when player accepted ready check',
   match_id        INT           NULL COMMENT 'Set when matched',
   map_preference  VARCHAR(32)   NULL COMMENT 'Optional preferred map (e.g. de_mirage)',
+  lobby_server_id VARCHAR(32)   NULL COMMENT 'Lobby server instance this player queued from (e.g. lobby-1)',
   PRIMARY KEY (id),
   -- A player can only have one active queue entry
   UNIQUE KEY uq_steam_active (steam_id, status),
@@ -539,3 +540,14 @@ CREATE TABLE IF NOT EXISTS mm_admins (
   last_login  DATETIME      NULL,
   PRIMARY KEY (steam_id)
 ) ENGINE=InnoDB COMMENT='Web-panel admin roster with role-based permissions';
+
+-- ============================================================
+-- MIGRATIONS — Multi-lobby support (run once on existing installs)
+-- ============================================================
+
+-- Track which lobby server instance each queued player connected from.
+-- Allows running multiple lobby servers against the same DB/matchmaker.
+ALTER TABLE mm_queue
+  ADD COLUMN IF NOT EXISTS lobby_server_id VARCHAR(32) NULL
+    COMMENT 'Lobby server instance this player queued from (e.g. lobby-1)'
+    AFTER map_preference;

@@ -65,7 +65,8 @@ float g_fQueueStartTime [MAXPLAYERS + 1]; // GetEngineTime() when player joined 
 // Globals
 // ─────────────────────────────────────────────────────────────────────────────
 
-Database g_hDB = null;
+Database g_hDB       = null;
+ConVar   g_cvLobbyID = null;  // mm_lobby_server_id — set in server.cfg
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plugin start / end
@@ -89,6 +90,13 @@ public void OnPluginStart()
     RegConsoleCmd("sm_recent",    Cmd_Recent,    "Show players from your last 5 matches");
     RegConsoleCmd("sm_avoid",     Cmd_Avoid,     "Avoid a player for 7 days: !avoid <name>");
     RegConsoleCmd("sm_avoidlist", Cmd_AvoidList, "Show your current avoid list");
+
+    // Lobby server identity — set mm_lobby_server_id in server.cfg
+    // Used to track which instance a player queued from when running multiple
+    // lobby servers against the same database.
+    g_cvLobbyID = CreateConVar("mm_lobby_server_id", "lobby-1",
+        "Unique ID for this lobby server instance (e.g. lobby-1, lobby-2)",
+        FCVAR_PROTECTED);
 
     // ── Game events ──────────────────────────────────────────────────────────
     HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
@@ -495,20 +503,23 @@ public void DB_FetchElo(Database db, DBResultSet results, const char[] error, Da
     DataPack pack2 = new DataPack();
     pack2.WriteCell(userid);
 
+    char lobbyID[32];
+    g_cvLobbyID.GetString(lobbyID, sizeof(lobbyID));
+
     char query[512];
     if (mapPref[0] != '\0')
     {
         char escapedMap[65];
         db.Escape(mapPref, escapedMap, sizeof(escapedMap));
         g_hDB.Format(query, sizeof(query),
-            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) VALUES ('%s', %d, %d, 'waiting', '%s')",
-            steamID, elo, rankTier, escapedMap);
+            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference, lobby_server_id) VALUES ('%s', %d, %d, 'waiting', '%s', '%s')",
+            steamID, elo, rankTier, escapedMap, lobbyID);
     }
     else
     {
         g_hDB.Format(query, sizeof(query),
-            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) VALUES ('%s', %d, %d, 'waiting')",
-            steamID, elo, rankTier);
+            "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, lobby_server_id) VALUES ('%s', %d, %d, 'waiting', '%s')",
+            steamID, elo, rankTier, lobbyID);
     }
     g_hDB.Query(DB_QueueInserted, query, pack2, DBPrio_High);
 }
@@ -726,18 +737,21 @@ public void DB_QueuePartyMembers(Database db, DBResultSet results, const char[] 
         }
 
         // INSERT queue entry
+        char partyLobbyID[32];
+        g_cvLobbyID.GetString(partyLobbyID, sizeof(partyLobbyID));
+
         char insertQuery[512];
         if (mapPref[0] != '\0')
         {
             g_hDB.Format(insertQuery, sizeof(insertQuery),
-                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference) VALUES ('%s', %d, %d, 'waiting', '%s')",
-                memberSteamIDs[i], memberElos[i], memberRanks[i], escapedMap);
+                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, map_preference, lobby_server_id) VALUES ('%s', %d, %d, 'waiting', '%s', '%s')",
+                memberSteamIDs[i], memberElos[i], memberRanks[i], escapedMap, partyLobbyID);
         }
         else
         {
             g_hDB.Format(insertQuery, sizeof(insertQuery),
-                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status) VALUES ('%s', %d, %d, 'waiting')",
-                memberSteamIDs[i], memberElos[i], memberRanks[i]);
+                "INSERT IGNORE INTO mm_queue (steam_id, elo, rank_tier, status, lobby_server_id) VALUES ('%s', %d, %d, 'waiting', '%s')",
+                memberSteamIDs[i], memberElos[i], memberRanks[i], partyLobbyID);
         }
         g_hDB.Query(DB_GenericCallback, insertQuery, _, DBPrio_High);
     }
