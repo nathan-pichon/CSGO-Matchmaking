@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Management — CS:GO MM{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Management</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Add / update admin ─────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Add / Update Admin</h2>
+  <form method="post" action="{{ url_for('admin_bp.admin_add') }}" class="admin-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="add_steam_id" class="form-label">Steam ID</label>
+        <input type="text" id="add_steam_id" name="steam_id" class="form-input"
+               placeholder="STEAM_0:1:12345678" required />
+      </div>
+      <div class="form-group form-group-sm">
+        <label for="add_role" class="form-label">Role</label>
+        <select id="add_role" name="role" class="form-input">
+          <option value="moderator">Moderator</option>
+          <option value="admin">Admin</option>
+          <option value="superadmin">Superadmin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="add_notes" class="form-label">Notes (optional)</label>
+        <input type="text" id="add_notes" name="notes" class="form-input"
+               placeholder="e.g. Head admin, discord: …" maxlength="255" />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-primary">Add / Update</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Admin roster ───────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Admin Roster ({{ admins|length }})</h2>
+  {% if admins %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Display Name</th>
+        <th>Steam ID</th>
+        <th>Role</th>
+        <th>Added by</th>
+        <th>Created</th>
+        <th>Last login</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in admins %}
+      <tr class="{% if a.steam_id == current_steam_id %}row-self{% endif %}">
+        <td>{{ a.display_name }}</td>
+        <td><code>{{ a.steam_id }}</code></td>
+        <td>
+          <span class="role-badge role-{{ a.role }}">{{ a.role }}</span>
+        </td>
+        <td>{{ a.added_by or '<em class="muted">system</em>'|safe }}</td>
+        <td>{{ a.created_at.strftime('%Y-%m-%d') if a.created_at else '—' }}</td>
+        <td>{{ a.last_login.strftime('%Y-%m-%d %H:%M') if a.last_login else '<span class="muted">never</span>'|safe }}</td>
+        <td class="notes-cell">{{ a.notes or '' }}</td>
+        <td class="actions-cell">
+          {% if a.steam_id != current_steam_id %}
+          <!-- Change role -->
+          <form method="post" action="{{ url_for('admin_bp.admin_set_role') }}"
+                class="inline-form"
+                onsubmit="return confirm('Change role for {{ a.display_name }}?')">
+            <input type="hidden" name="steam_id" value="{{ a.steam_id }}" />
+            <select name="role" class="form-input form-input-sm">
+              {% for r in ['moderator', 'admin', 'superadmin'] %}
+              <option value="{{ r }}" {% if r == a.role %}selected{% endif %}>{{ r }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-ghost btn-sm">Set</button>
+          </form>
+          <!-- Remove -->
+          <form method="post" action="{{ url_for('admin_bp.admin_remove') }}"
+                class="inline-form"
+                onsubmit="return confirm('Remove admin {{ a.display_name }}? This cannot be undone.')">
+            <input type="hidden" name="steam_id" value="{{ a.steam_id }}" />
+            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+          </form>
+          {% else %}
+          <span class="muted">(you)</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No admins configured yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header      { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section       { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .form-row            { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group          { flex:1; min-width:160px; }
+  .form-group-sm       { flex:0 0 160px; }
+  .form-group-btn      { flex:0 0 auto; }
+  .form-label          { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input          { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; }
+  .form-input:focus    { outline:none; border-color:var(--accent); }
+  .form-input-sm       { padding:0.3rem 0.5rem; font-size:0.8rem; width:auto; }
+  .btn                 { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .btn-primary         { background:var(--accent); color:#fff; }
+  .btn-primary:hover   { background:var(--accent-hover); }
+  .btn-ghost           { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover     { border-color:var(--accent); color:var(--accent); }
+  .btn-danger          { background:var(--danger); color:#fff; }
+  .btn-danger:hover    { background:#c62828; }
+  .btn-sm              { padding:0.3rem 0.7rem; font-size:0.8rem; }
+  .role-badge          { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .role-superadmin     { background:rgba(255,152,0,.2); color:#ffa726; }
+  .role-admin          { background:rgba(100,149,237,.2); color:#6495ed; }
+  .role-moderator      { background:rgba(76,175,80,.2); color:var(--success); }
+  .inline-form         { display:inline-flex; align-items:center; gap:0.4rem; }
+  .actions-cell        { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+  .notes-cell          { max-width:200px; font-size:0.85rem; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .muted               { color:var(--text-secondary); font-size:0.85rem; }
+  .row-self            { background:rgba(100,149,237,.05); }
+  .empty-state         { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+</style>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Player Reports — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Reports</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<div class="card admin-section">
+  <h2 class="admin-section-title">
+    Flagged Players
+    <span class="hint">(≥ 3 unique reporters in last 30 days, unreviewed)</span>
+  </h2>
+
+  {% if flagged %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Steam ID</th>
+        <th>Unique Reporters</th>
+        <th>Total Reports</th>
+        <th>Last Report</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in flagged %}
+      <tr>
+        <td>{{ r.display_name }}</td>
+        <td><code>{{ r.reported_id }}</code></td>
+        <td>
+          <span class="reporter-count {% if r.unique_reporters >= 5 %}count-high{% elif r.unique_reporters >= 3 %}count-med{% endif %}">
+            {{ r.unique_reporters }}
+          </span>
+        </td>
+        <td>{{ r.total_reports }}</td>
+        <td>{{ r.last_report.strftime('%Y-%m-%d %H:%M') if r.last_report else '—' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_bp.report_dismiss', reported_id=r.reported_id) }}"
+                onsubmit="return confirm('Mark all reports for {{ r.display_name }} as reviewed?')">
+            <button type="submit" class="btn btn-ghost btn-sm">Dismiss</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No players flagged for review at this time.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header      { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section       { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .hint                { font-size:0.78rem; text-transform:none; letter-spacing:0; font-weight:400; color:var(--text-secondary); margin-left:0.5rem; }
+  .btn                 { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .btn-ghost           { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover     { border-color:var(--accent); color:var(--accent); }
+  .btn-sm              { padding:0.3rem 0.7rem; font-size:0.8rem; }
+  .reporter-count      { font-weight:700; }
+  .count-med           { color:#ffa726; }
+  .count-high          { color:var(--danger); }
+  .empty-state         { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+</style>
+{% endblock %}

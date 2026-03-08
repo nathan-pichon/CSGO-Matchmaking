@@ -8,11 +8,23 @@
     <h1 class="admin-login-title">
       <span class="logo-bracket">[</span>ADMIN<span class="logo-accent">&#8201;&#x25A0;</span><span class="logo-bracket">]</span>
     </h1>
-    <p class="admin-login-sub">Enter your admin token to continue.</p>
+    <p class="admin-login-sub">Enter your Steam ID and admin token to continue.</p>
 
     <form method="post" action="{{ url_for('admin_bp.login_post') }}" autocomplete="off">
       <div class="form-group">
-        <label for="token" class="form-label">Token</label>
+        <label for="steam_id" class="form-label">Steam ID</label>
+        <input
+          type="text"
+          id="steam_id"
+          name="steam_id"
+          class="form-input"
+          placeholder="STEAM_0:1:12345678"
+          required
+          autofocus
+        />
+      </div>
+      <div class="form-group">
+        <label for="token" class="form-label">Admin Token</label>
         <input
           type="password"
           id="token"
@@ -20,7 +32,6 @@
           class="form-input"
           placeholder="••••••••••••••••••••••••"
           required
-          autofocus
         />
       </div>
       <button type="submit" class="btn btn-primary btn-block">Sign in</button>

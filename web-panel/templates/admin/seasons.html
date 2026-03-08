@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Season Management — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Seasons</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Start new season ───────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Start New Season</h2>
+  <p class="section-note">
+    This will close the current active season, create a new one, and apply a
+    <strong>soft ELO reset</strong> to all players:
+    players above the reset value are pulled halfway towards it.
+    This action cannot be undone.
+  </p>
+  <form method="post" action="{{ url_for('admin_bp.season_new') }}" class="admin-form"
+        onsubmit="return confirm('Start a new season and reset all ELO? This cannot be undone.')">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="season_name" class="form-label">Season Name</label>
+        <input type="text" id="season_name" name="name" class="form-input"
+               placeholder="Season 2" required maxlength="64" />
+      </div>
+      <div class="form-group form-group-sm">
+        <label for="elo_reset_to" class="form-label">ELO Reset To</label>
+        <input type="number" id="elo_reset_to" name="elo_reset_to" class="form-input"
+               min="0" max="9999" value="1000" required />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-danger">Start Season</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Season history ─────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Season History ({{ seasons|length }})</h2>
+  {% if seasons %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>ELO Reset</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in seasons %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.name }}</td>
+        <td>{{ s.start_date }}</td>
+        <td>{{ s.end_date or '—' }}</td>
+        <td>{{ s.elo_reset_to }}</td>
+        <td>
+          {% if s.is_active %}
+          <span class="badge-active">Active</span>
+          {% else %}
+          <span class="badge-ended">Ended</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No seasons found.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header      { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section       { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:0.75rem; }
+  .section-note        { font-size:0.88rem; color:var(--text-secondary); margin-bottom:1rem; }
+  .form-row            { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group          { flex:1; min-width:160px; }
+  .form-group-sm       { flex:0 0 160px; }
+  .form-group-btn      { flex:0 0 auto; }
+  .form-label          { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input          { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; }
+  .form-input:focus    { outline:none; border-color:var(--accent); }
+  .btn                 { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .btn-ghost           { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover     { border-color:var(--accent); color:var(--accent); }
+  .btn-danger          { background:var(--danger); color:#fff; }
+  .btn-danger:hover    { background:#c62828; }
+  .badge-active        { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; background:rgba(76,175,80,.2); color:var(--success); }
+  .badge-ended         { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; background:rgba(150,150,150,.2); color:var(--text-secondary); }
+  .empty-state         { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+</style>
+{% endblock %}
