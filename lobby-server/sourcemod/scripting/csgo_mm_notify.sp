@@ -3,10 +3,9 @@
  *
  * Runs alongside csgo_mm_queue.sp on the lobby server.
  * Responsible for:
- *   - Welcome messages when players connect
- *   - Periodic queue-count announcements to all players
+ *   - Welcome panel + !help / !commands for command discoverability
+ *   - Periodic queue-count HUD hints to all players
  *   - HUD hints for spectating players
- *   - Periodic top-3 ELO scoreboard broadcasts
  *
  * Compile: spcomp csgo_mm_notify.sp -i scripting/include
  */
@@ -26,7 +25,7 @@
 public Plugin myinfo = {
     name        = "CS:GO Matchmaking - Notifications",
     author      = "CSGO-MM",
-    description = "Queue announcements, welcome messages, HUD hints, and top-3 broadcast",
+    description = "Welcome panel, !help command, queue HUD hints, spectator hints",
     version     = MM_VERSION,
     url         = ""
 };
@@ -62,6 +61,10 @@ public void OnPluginStart()
     // Repeating timers
     CreateTimer(ANNOUNCE_QUEUE_INTERVAL, Timer_AnnounceQueue, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(ANNOUNCE_HUD_INTERVAL,   Timer_HudHint,       _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+
+    // Help command — callable at any time to reopen the command guide panel
+    RegConsoleCmd("sm_help",     Cmd_Help, "Show all matchmaking commands");
+    RegConsoleCmd("sm_commands", Cmd_Help, "Show all matchmaking commands");
 
     LogMessage("[MM-Notify] Notification plugin loaded (v%s)", MM_VERSION);
 }
@@ -116,25 +119,85 @@ public Action Timer_WelcomeClient(Handle timer, any userid)
     char name[64];
     GetClientName(client, name, sizeof(name));
 
-    // ── Welcome header ────────────────────────────────────────────────────────
+    // One brief chat greeting — full command list is shown in the panel below.
+    // Keeping this to a single line avoids flooding the chat on busy servers.
     PrintToChat(client,
-        " \x02[MM]\x01 Welcome, \x04%s\x01!", name);
-    PrintToChat(client,
-        " \x02[MM]\x01 This is a \x09competitive matchmaking\x01 lobby server.");
-    PrintToChat(client,
-        " \x02[MM]\x01 Type \x04!queue\x01 to join the matchmaking queue.");
-    PrintToChat(client,
-        " \x02[MM]\x01 Commands: \x04!queue\x01 | \x04!leave\x01 | \x04!rank\x01 | \x04!stats\x01 | \x04!top\x01");
+        " \x02[MM]\x01 Welcome, \x04%s\x01! A command guide has been opened for you. Type \x04!help\x01 to reopen it.",
+        name);
 
-    // If the DB is up, also tell the player how many people are currently queued
+    // If players are already queued, surface that immediately so new arrivals
+    // can decide whether to join — one extra line is worthwhile here.
     if (g_hDB != null && g_iCachedQueueCount > 0)
-    {
         PrintToChat(client,
-            " \x02[MM]\x01 \x09%d\x01 player(s) are currently in queue!",
+            " \x02[MM]\x01 \x09%d\x01 player(s) in queue right now — type \x04!queue\x01 to join!",
             g_iCachedQueueCount);
-    }
+
+    // Open the help panel — all commands, grouped, with panel UX note
+    ShowHelpPanel(client);
 
     return Plugin_Stop;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Help panel — all commands, grouped by category
+//
+// Shown automatically on connect (Timer_WelcomeClient) and on demand via
+// !help / !commands.  Uses a Panel so only the requesting player sees it —
+// no chat noise for the other 49 players on the server.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ShowHelpPanel(int client)
+{
+    Panel panel = new Panel();
+    panel.SetTitle("CS:GO Matchmaking — Commands");
+
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawText("[ QUEUE ]");
+    panel.DrawText("!queue [map]       Join competitive queue");
+    panel.DrawText("!leave             Leave the queue");
+    panel.DrawText("!status            Your position & wait time");
+
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawText("[ STATS & RANKINGS ]");
+    panel.DrawText("!rank              ELO, rank tier, W/L, K/D");
+    panel.DrawText("!stats             Full career stats  [panel]");
+    panel.DrawText("!top               Top 10 leaderboard [panel]");
+    panel.DrawText("!lastmatch         Summary of your last match");
+    panel.DrawText("!recent            Players from last 5 matches");
+
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawText("[ SOCIAL ]");
+    panel.DrawText("!party invite <name>   Create/invite to party");
+    panel.DrawText("!party accept/decline  Respond to an invite");
+    panel.DrawText("!party leave/kick      Manage your party");
+    panel.DrawText("!avoid <name>          Avoid a player (7 days)");
+    panel.DrawText("!avoidlist             View your avoid list");
+
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawText("Commands marked [panel] open a menu like");
+    panel.DrawText("this one. Press the number shown to close.");
+    panel.DrawText("Type !help at any time to reopen this guide.");
+    panel.DrawText("────────────────────────────────────");
+
+    panel.DrawItem("Close");
+    panel.Send(client, Panel_HelpHandler, 30);
+    delete panel;
+}
+
+// No-op handler — this panel is display-only; any key press just closes it
+public int Panel_HelpHandler(Menu menu, MenuAction action, int client, int item)
+{
+    return 0;
+}
+
+// !help / !commands — reopen the command guide at any time
+public Action Cmd_Help(int client, int args)
+{
+    if (!MM_IsValidClient(client))
+        return Plugin_Handled;
+
+    ShowHelpPanel(client);
+    return Plugin_Handled;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
