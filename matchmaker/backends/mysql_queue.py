@@ -34,6 +34,7 @@ def _row_to_entry(row: dict) -> QueueEntry:
 
     Args:
         row: Dict returned by ``db.query_*`` with all ``mm_queue`` columns.
+             May optionally include a ``party_id`` key from a JOIN.
 
     Returns:
         Populated :class:`QueueEntry`.
@@ -49,6 +50,7 @@ def _row_to_entry(row: dict) -> QueueEntry:
         ready=bool(row.get("ready", False)),
         match_id=row.get("match_id"),
         map_preference=row.get("map_preference"),
+        party_id=row.get("party_id"),
     )
 
 
@@ -152,6 +154,27 @@ class MySQLQueueBackend(QueueBackend):
             return [_row_to_entry(r) for r in rows]
         except Exception as exc:
             logger.error("get_waiting_entries failed: %s", exc)
+            return []
+
+    def _get_waiting_entries_with_party(self) -> list[QueueEntry]:
+        """Return waiting entries joined with party membership.
+
+        Returns:
+            List of :class:`QueueEntry` objects with ``party_id`` populated.
+        """
+        try:
+            rows = self._db.query_all(
+                """
+                SELECT q.*, pm.party_id
+                FROM mm_queue q
+                LEFT JOIN mm_party_members pm ON pm.steam_id = q.steam_id
+                WHERE q.status = 'waiting'
+                ORDER BY q.queued_at ASC
+                """
+            )
+            return [_row_to_entry(r) for r in rows]
+        except Exception as exc:
+            logger.error("_get_waiting_entries_with_party failed: %s", exc)
             return []
 
     # ---------------------------------------------------------------------- #
@@ -399,12 +422,14 @@ class MySQLQueueBackend(QueueBackend):
 
         Algorithm
         ---------
-        1. Fetch all ``status='waiting'`` entries ordered by ``queued_at``.
-        2. Compute a per-player dynamic ELO spread window based on wait time.
-        3. Anchor on the longest-waiting player and greedily collect the next
-           9 compatible players (within the current spread window) sorted by
-           ELO proximity.
-        4. Balance teams using the snake-draft algorithm.
+        1. Fetch all ``status='waiting'`` entries with party membership.
+        2. Group entries into blocks (one block per party; solos are
+           single-entry blocks).
+        3. Anchor on the block containing the longest-waiting player and
+           greedily collect compatible blocks (within the ELO spread window).
+           Party blocks that would exceed the player limit are skipped.
+        4. Balance teams using the party-aware snake-draft algorithm, which
+           keeps all members of a party on the same team.
         5. Select map via majority preference, breaking ties with a weighted
            random draw from the active map pool.
 
@@ -417,45 +442,90 @@ class MySQLQueueBackend(QueueBackend):
         spread_interval = getattr(self._config, "ELO_SPREAD_INCREASE_INTERVAL", 60)
         spread_amount = getattr(self._config, "ELO_SPREAD_INCREASE_AMOUNT", 50)
 
-        entries = self.get_waiting_entries()
+        entries = self._get_waiting_entries_with_party()
         if len(entries) < required:
             return None
 
         now = datetime.utcnow()
 
         def effective_spread(entry: QueueEntry) -> int:
-            wait_seconds = (now - entry.queued_at.replace(tzinfo=None)
-                            if entry.queued_at.tzinfo else now - entry.queued_at
-                            ).total_seconds()
+            wait_seconds = (
+                now - entry.queued_at.replace(tzinfo=None)
+                if entry.queued_at.tzinfo
+                else now - entry.queued_at
+            ).total_seconds()
             intervals = int(wait_seconds / max(spread_interval, 1))
             return base_spread + intervals * spread_amount
 
-        # Anchor on the longest-waiting player (entries already sorted asc).
-        anchor = entries[0]
-        anchor_spread = effective_spread(anchor)
+        # Group entries into blocks ordered by oldest member's queued_at.
+        party_dict: dict[int, list[QueueEntry]] = {}
+        solo_list: list[QueueEntry] = []
 
-        candidates = [anchor]
-        for entry in entries[1:]:
-            spread = min(effective_spread(entry), effective_spread(anchor))
-            if abs(entry.elo - anchor.elo) <= spread:
-                candidates.append(entry)
-            if len(candidates) >= required:
+        for entry in entries:
+            if entry.party_id is not None:
+                party_dict.setdefault(entry.party_id, []).append(entry)
+            else:
+                solo_list.append(entry)
+
+        blocks: list[list[QueueEntry]] = [
+            sorted(members, key=lambda e: e.queued_at)
+            for members in party_dict.values()
+        ] + [[e] for e in solo_list]
+
+        # Sort blocks by their oldest member's queued_at (queue fairness).
+        blocks.sort(key=lambda b: b[0].queued_at)
+
+        if not blocks:
+            return None
+
+        # Anchor on the oldest block.
+        anchor_block = blocks[0]
+        anchor_elo = sum(e.elo for e in anchor_block) / len(anchor_block)
+        anchor_spread = min(effective_spread(e) for e in anchor_block)
+
+        selected_blocks: list[list[QueueEntry]] = [anchor_block]
+        selected_count = len(anchor_block)
+
+        for block in blocks[1:]:
+            if selected_count >= required:
                 break
+            # Skip party blocks that would push us over the required count.
+            if selected_count + len(block) > required:
+                if len(block) > 1:
+                    continue
+                # Solo player: skip without breaking (may still find others)
+                continue
+            block_avg_elo = sum(e.elo for e in block) / len(block)
+            block_spread = min(effective_spread(e) for e in block)
+            allowed_spread = min(anchor_spread, block_spread)
+            if abs(block_avg_elo - anchor_elo) <= allowed_spread:
+                selected_blocks.append(block)
+                selected_count += len(block)
 
-        if len(candidates) < required:
+        if selected_count < required:
             logger.debug(
                 "find_balanced_match: only %d compatible players (need %d)",
-                len(candidates), required,
+                selected_count, required,
             )
             return None
 
-        # Take exactly *required* players, closest in ELO to the anchor.
-        group = sorted(candidates[:required], key=lambda e: abs(e.elo - anchor.elo))[:required]
+        group = [entry for block in selected_blocks for entry in block]
 
-        # Snake-draft team assignment.
-        team1, team2 = self._snake_draft(group)
+        # ── Avoid-list check ─────────────────────────────────────────────────
+        # Query mm_avoid_list for any conflicts among the candidate group.
+        # If a conflict exists, remove the more recently queued of the two and
+        # retry from the outer blocks loop (caller should call us again).
+        conflicted = self._find_avoid_conflict(group)
+        if conflicted is not None:
+            logger.debug(
+                "find_balanced_match: avoid conflict involving %s — skipping",
+                conflicted,
+            )
+            return None  # Caller will retry; the expired entry will sort later
 
-        # Map selection.
+        # Party-aware team assignment.
+        team1, team2 = self._snake_draft_with_parties(selected_blocks)
+
         map_name = self._select_map(group)
 
         logger.info(
@@ -475,6 +545,49 @@ class MySQLQueueBackend(QueueBackend):
     # ---------------------------------------------------------------------- #
     # Internal helpers
     # ---------------------------------------------------------------------- #
+
+    def _find_avoid_conflict(self, group: list[QueueEntry]) -> Optional[str]:
+        """Check the group for avoid-list conflicts.
+
+        Queries ``mm_avoid_list`` for any active mutual avoid among the 10
+        players.  Returns the Steam ID of the more recently queued player of
+        the conflicting pair (to be excluded), or ``None`` if no conflict.
+
+        Args:
+            group: The candidate list of 10 :class:`QueueEntry` objects.
+
+        Returns:
+            Steam ID to exclude, or ``None``.
+        """
+        steam_ids = [e.steam_id for e in group]
+        if len(steam_ids) < 2:
+            return None
+
+        placeholders = ", ".join(f"'{sid}'" for sid in steam_ids)
+        query = (
+            "SELECT steam_id, avoided_id FROM mm_avoid_list "
+            f"WHERE expires_at > NOW() "
+            f"  AND steam_id  IN ({placeholders}) "
+            f"  AND avoided_id IN ({placeholders}) "
+            "LIMIT 1"
+        )
+        try:
+            row = self._db.query_one(query)
+        except Exception as exc:
+            logger.error("avoid conflict check failed: %s", exc)
+            return None
+
+        if row is None:
+            return None
+
+        # Find the two players in the group and return the more recently queued
+        sid_a, sid_b = row["steam_id"], row["avoided_id"]
+        entry_a = next((e for e in group if e.steam_id == sid_a), None)
+        entry_b = next((e for e in group if e.steam_id == sid_b), None)
+        if entry_a is None or entry_b is None:
+            return sid_a
+        # Exclude the player who joined the queue more recently
+        return sid_a if entry_a.queued_at > entry_b.queued_at else sid_b
 
     @staticmethod
     def _snake_draft(players: list[QueueEntry]) -> tuple[list[QueueEntry], list[QueueEntry]]:
@@ -525,6 +638,43 @@ class MySQLQueueBackend(QueueBackend):
                 team1.append(player)
             else:
                 team2.append(player)
+
+        return team1, team2
+
+    @staticmethod
+    def _snake_draft_with_parties(
+        blocks: list[list[QueueEntry]],
+    ) -> tuple[list[QueueEntry], list[QueueEntry]]:
+        """Assign players to teams while keeping party members on the same team.
+
+        Blocks are sorted by average ELO descending, then assigned greedily
+        to whichever team currently has the lower total ELO sum.  This
+        minimises the inter-team ELO gap while honouring party constraints.
+
+        Args:
+            blocks: List of player blocks.  Each block is a list of
+                    :class:`QueueEntry` objects belonging to the same party
+                    (or a single-entry list for solo players).
+
+        Returns:
+            Tuple of ``(team1, team2)`` each containing 5 players.
+        """
+        team1: list[QueueEntry] = []
+        team2: list[QueueEntry] = []
+
+        sorted_blocks = sorted(
+            blocks,
+            key=lambda b: sum(e.elo for e in b) / len(b),
+            reverse=True,
+        )
+
+        for block in sorted_blocks:
+            t1_sum = sum(e.elo for e in team1)
+            t2_sum = sum(e.elo for e in team2)
+            if t1_sum <= t2_sum:
+                team1.extend(block)
+            else:
+                team2.extend(block)
 
         return team1, team2
 

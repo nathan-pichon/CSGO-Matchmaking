@@ -68,6 +68,7 @@ class QueueEntry:
     ready: bool = False
     match_id: Optional[int] = None
     map_preference: Optional[str] = None
+    party_id: Optional[int] = None
 
 
 @dataclass

@@ -67,7 +67,10 @@ class Config:
         # Timeouts (seconds)
         # ------------------------------------------------------------------ #
         self.READY_CHECK_TIMEOUT: int = 30
-        self.WARMUP_TIMEOUT: int = 300
+        # Must match WARMUP_TIMEOUT in csgo_mm_match.sp (180s / 3 minutes).
+        # The plugin cancels the match server-side; the daemon mirrors that
+        # decision.  Both values must stay in sync.
+        self.WARMUP_TIMEOUT: int = 180
 
         # ------------------------------------------------------------------ #
         # ELO / ranking

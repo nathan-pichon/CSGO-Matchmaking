@@ -49,6 +49,21 @@ _MAX_CONSECUTIVE_ERRORS = 5
 _BACKOFF_BASE_SECONDS = 5
 _BACKOFF_MAX_SECONDS = 120
 
+# ---------------------------------------------------------------------------
+# Abandon-ban escalation table
+# Offense level → ban duration in minutes.
+# After ABANDON_DECAY_DAYS days without another abandon, the effective offense
+# level drops by 1 (floor 0), so the next ban is one step lighter.
+# ---------------------------------------------------------------------------
+_ABANDON_BAN_MINUTES: dict[int, int] = {
+    1: 30,      # first offense  → 30 minutes
+    2: 120,     # second offense → 2 hours
+    3: 1440,    # third offense  → 24 hours
+    4: 10080,   # fourth offense → 7 days
+}
+_ABANDON_BAN_MAX_MINUTES: int = 43200   # fifth+ offense → 30 days
+_ABANDON_DECAY_DAYS:      int = 14      # days of good behaviour to drop one level
+
 
 class MatchmakingDaemon:
     """CS:GO matchmaking orchestration daemon.
@@ -197,6 +212,86 @@ class MatchmakingDaemon:
     # ---------------------------------------------------------------------- #
     # Individual pipeline steps
     # ---------------------------------------------------------------------- #
+
+    # ---------------------------------------------------------------------- #
+    # Abandon-ban helpers
+    # ---------------------------------------------------------------------- #
+
+    @staticmethod
+    def _get_abandon_ban_minutes(offense_level: int) -> int:
+        """Return the ban duration in minutes for the given offense level.
+
+        Args:
+            offense_level: 1-based offense count after decay has been applied.
+
+        Returns:
+            Integer minutes to ban.
+        """
+        return _ABANDON_BAN_MINUTES.get(offense_level, _ABANDON_BAN_MAX_MINUTES)
+
+    def _apply_abandon_penalty(
+        self,
+        steam_id: str,
+        abandon_count: int,
+        last_abandon_at: Optional[datetime],
+    ) -> None:
+        """Insert a matchmaking ban for a player who abandoned a live match.
+
+        Implements progressive escalation with a 14-day decay window:
+        if the player's last abandon was more than ``_ABANDON_DECAY_DAYS``
+        days ago, their effective offense level drops by one before the new
+        ban is calculated.
+
+        Args:
+            steam_id:        Player's legacy Steam ID.
+            abandon_count:   Current ``mm_players.abandon_count`` value.
+            last_abandon_at: Timestamp of previous abandon, or ``None``.
+        """
+        # Decay: one level of forgiveness after 14 clean days.
+        effective_count = abandon_count
+        if abandon_count > 0 and last_abandon_at is not None:
+            days_since = (datetime.utcnow() - last_abandon_at).days
+            if days_since > _ABANDON_DECAY_DAYS:
+                effective_count = max(0, abandon_count - 1)
+                logger.info(
+                    "_apply_abandon_penalty: decay applied steam_id=%s "
+                    "abandon_count=%d → effective=%d (last=%s)",
+                    steam_id, abandon_count, effective_count, last_abandon_at,
+                )
+
+        new_count  = effective_count + 1
+        ban_min    = self._get_abandon_ban_minutes(new_count)
+        reason     = f"Match abandon (offense #{new_count})"
+
+        try:
+            self._db.execute(
+                """
+                INSERT INTO mm_bans
+                  (steam_id, reason, expires_at, banned_by, is_active)
+                VALUES
+                  (%s, %s, DATE_ADD(NOW(), INTERVAL %s MINUTE), 'system', 1)
+                """,
+                (steam_id, reason, ban_min),
+            )
+            self._db.execute(
+                """
+                UPDATE mm_players
+                SET is_banned       = 1,
+                    ban_until       = DATE_ADD(NOW(), INTERVAL %s MINUTE),
+                    abandon_count   = %s,
+                    last_abandon_at = NOW()
+                WHERE steam_id = %s
+                """,
+                (ban_min, new_count, steam_id),
+            )
+            logger.info(
+                "_apply_abandon_penalty: steam_id=%s offense=#%d ban=%dmin",
+                steam_id, new_count, ban_min,
+            )
+        except Exception as exc:
+            logger.error(
+                "_apply_abandon_penalty: DB error for %s: %s", steam_id, exc
+            )
 
     def _step_find_and_ready_check(self) -> None:
         """Find a balanced 10-player group and start a ready check.
@@ -403,7 +498,7 @@ class MatchmakingDaemon:
 
         player_rows = self._db.query_all(
             """
-            SELECT mp.*, p.matches_played
+            SELECT mp.*, p.matches_played, p.abandon_count, p.last_abandon_at
             FROM mm_match_players mp
             JOIN mm_players p ON p.steam_id = mp.steam_id
             WHERE mp.match_id = %s
@@ -460,6 +555,43 @@ class MatchmakingDaemon:
             )
             return
 
+        # ── Abandon ELO override ─────────────────────────────────────────────
+        # Any player who abandoned while their team was winning (or tied)
+        # receives the loss delta instead of their normal result.
+        # This is computed *after* the base calculation so we can reuse the
+        # K-factor and expected-score helpers from the ranking backend.
+        abandoned_rows = [r for r in player_rows if r.get("abandoned")]
+        if abandoned_rows:
+            team1_avg = (
+                sum(p["elo_before"] for p in team1_players) / len(team1_players)
+                if team1_players else 0.0
+            )
+            team2_avg = (
+                sum(p["elo_before"] for p in team2_players) / len(team2_players)
+                if team2_players else 0.0
+            )
+            for r in abandoned_rows:
+                sid  = r["steam_id"]
+                team = r["team"]
+                on_winning_team = (
+                    (team == "team1" and winner == "team1")
+                    or (team == "team2" and winner == "team2")
+                )
+                # Override only if the player would have gained ELO (won/tied).
+                if on_winning_team or winner == "tie":
+                    k = self._ranking.get_k_factor(r.get("matches_played", 0))
+                    expected = self._ranking.expected_score(
+                        team1_avg if team == "team1" else team2_avg,
+                        team2_avg if team == "team1" else team1_avg,
+                    )
+                    original = elo_changes.get(sid, 0)
+                    elo_changes[sid] = round(k * (0.0 - expected))
+                    logger.info(
+                        "_process_match_result: abandon ELO override "
+                        "steam_id=%s original=%+d → overridden=%+d",
+                        sid, original, elo_changes[sid],
+                    )
+
         # Apply ELO updates and track rank-ups.
         for r in player_rows:
             sid = r["steam_id"]
@@ -507,6 +639,16 @@ class MatchmakingDaemon:
                 except Exception as exc:
                     logger.warning("notify_rank_up failed for %s: %s", sid, exc)
 
+        # ── Abandon penalties ────────────────────────────────────────────────
+        # Applied after stats are saved so the ban does not interfere with
+        # the update_player_after_match write.
+        for r in abandoned_rows:
+            self._apply_abandon_penalty(
+                steam_id=r["steam_id"],
+                abandon_count=r.get("abandon_count", 0),
+                last_abandon_at=r.get("last_abandon_at"),
+            )
+
         # Send result notification.
         top_fragger: dict = {}
         if player_stats:
@@ -517,6 +659,13 @@ class MatchmakingDaemon:
                 "elo_change": elo_changes.get(top_sid, 0),
             }
 
+        # Build enriched per-team stat list for Discord scoreboard.
+        stats_list = [
+            {"steam_id": sid, "team": data.get("team"), **data,
+             "elo_change": elo_changes.get(sid, 0)}
+            for sid, data in player_stats.items()
+        ] if player_stats else None
+
         try:
             self._notify.notify_match_result(
                 match_id=match_id,
@@ -524,6 +673,8 @@ class MatchmakingDaemon:
                 team1_score=match.get("team1_score", 0),
                 team2_score=match.get("team2_score", 0),
                 top_player=top_fragger,
+                player_stats=stats_list,
+                elo_changes=elo_changes,
             )
         except Exception as exc:
             logger.warning("notify_match_result failed: %s", exc)
@@ -632,8 +783,16 @@ class MatchmakingDaemon:
         """Cancel warmup matches where the server never went live in time.
 
         Any match with ``status='warmup'`` and ``started_at`` older than
-        ``WARMUP_TIMEOUT`` seconds is cancelled, resources are released,
-        and players are re-queued.
+        ``WARMUP_TIMEOUT`` seconds is cancelled.
+
+        Behaviour per player:
+
+        * **Absent** (``connected=0``) — receive a 5-minute no-show ban.
+          Their queue entry is marked ``cancelled`` so they do not
+          auto-requeue while banned.
+        * **Present** (``connected=1``) — no penalty.  Their queue entry
+          is reset to ``waiting`` with the *original* ``queued_at``
+          timestamp so they retain their place in line.
         """
         try:
             timeout_dt = datetime.utcnow() - timedelta(
@@ -656,6 +815,51 @@ class MatchmakingDaemon:
                     match_id, self._config.WARMUP_TIMEOUT,
                 )
 
+                # Classify players as absent or present.
+                player_rows = self._db.query_all(
+                    "SELECT steam_id, connected FROM mm_match_players WHERE match_id = %s",
+                    (match_id,),
+                )
+                absent_ids  = [r["steam_id"] for r in player_rows if not r.get("connected")]
+                present_ids = [r["steam_id"] for r in player_rows if     r.get("connected")]
+
+                # Short no-show ban for absent players (does not increment
+                # abandon_count — missing warmup is less severe than leaving
+                # a live match).
+                for sid in absent_ids:
+                    try:
+                        self._db.execute(
+                            """
+                            INSERT INTO mm_bans
+                              (steam_id, reason, expires_at, banned_by, is_active)
+                            VALUES
+                              (%s, 'No-show at match start',
+                               DATE_ADD(NOW(), INTERVAL 5 MINUTE), 'system', 1)
+                            """,
+                            (sid,),
+                        )
+                        self._db.execute(
+                            """
+                            UPDATE mm_players
+                            SET is_banned = 1,
+                                ban_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
+                            WHERE steam_id = %s
+                            """,
+                            (sid,),
+                        )
+                        logger.info(
+                            "_step_cancel_timed_out_warmups: no-show ban "
+                            "steam_id=%s match_id=%d",
+                            sid, match_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "_step_cancel_timed_out_warmups: ban error "
+                            "steam_id=%s: %s",
+                            sid, exc,
+                        )
+
+                # Cancel the match record.
                 self._db.execute(
                     """
                     UPDATE mm_matches
@@ -665,8 +869,43 @@ class MatchmakingDaemon:
                     (match_id,),
                 )
 
-                # Re-queue the players who were matched to this game.
-                self._queue.cancel_match_queue(match_id, requeue=True)
+                # Absent players: cancel their queue entry (they are banned
+                # and must re-queue manually once the ban expires).
+                for sid in absent_ids:
+                    try:
+                        self._db.execute(
+                            "UPDATE mm_queue SET status = 'cancelled' "
+                            "WHERE steam_id = %s AND status = 'matched'",
+                            (sid,),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "_step_cancel_timed_out_warmups: cancel queue "
+                            "error steam_id=%s: %s",
+                            sid, exc,
+                        )
+
+                # Present players: restore queue entry to 'waiting' keeping
+                # the original queued_at so they keep their position.
+                for sid in present_ids:
+                    try:
+                        self._db.execute(
+                            "UPDATE mm_queue SET status = 'waiting', match_id = NULL "
+                            "WHERE steam_id = %s AND status = 'matched'",
+                            (sid,),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "_step_cancel_timed_out_warmups: requeue error "
+                            "steam_id=%s: %s",
+                            sid, exc,
+                        )
+
+                logger.info(
+                    "_step_cancel_timed_out_warmups: match_id=%d cancelled "
+                    "absent=%d present=%d (requeued)",
+                    match_id, len(absent_ids), len(present_ids),
+                )
 
         except Exception as exc:
             logger.error(
