@@ -161,7 +161,7 @@ ExecStart=${csgo_bin} \\
     +game_type 0 \\
     +game_mode 0 \\
     -tickrate 128 \\
-    -maxplayers_override 32 \\
+    -maxplayers_override 64 \\
     -port ${LOBBY_PORT} \\
     +sv_setsteamaccount ${LOBBY_GSLT} \\
     +exec server.cfg \\

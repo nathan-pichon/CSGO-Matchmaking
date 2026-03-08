@@ -86,7 +86,7 @@ docker run -d \
   --network=host \
   -e SRCDS_TOKEN="${LOBBY_GSLT}" \
   -e SRCDS_PORT=27015 \
-  -e SRCDS_MAXPLAYERS=32 \
+  -e SRCDS_MAXPLAYERS=64 \
   -e SRCDS_STARTMAP=de_dust2 \
   -e SRCDS_GAMETYPE=0 \
   -e SRCDS_GAMEMODE=0 \

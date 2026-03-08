@@ -6,6 +6,7 @@
  *   - Welcome panel + !help / !commands for command discoverability
  *   - Periodic queue-count HUD hints to all players
  *   - HUD hints for spectating players
+ *   - Spectator-only enforcement (blocks CT/T joins, force-specs on connect)
  *
  * Compile: spcomp csgo_mm_notify.sp -i scripting/include
  */
@@ -66,12 +67,67 @@ public void OnPluginStart()
     RegConsoleCmd("sm_help",     Cmd_Help, "Show all matchmaking commands");
     RegConsoleCmd("sm_commands", Cmd_Help, "Show all matchmaking commands");
 
+    // Spectator-only enforcement — block CT/T joins at the command level
+    AddCommandListener(Listener_JoinTeam, "jointeam");
+
     LogMessage("[MM-Notify] Notification plugin loaded (v%s)", MM_VERSION);
 }
 
 public void OnPluginEnd()
 {
     delete g_hDB;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spectator-only enforcement
+//
+// The lobby server is purely for queuing — no real gameplay happens here.
+// We block CT/T joins at the command level and force every connecting player
+// into spectator so they can use all MM commands without being in a team.
+// ─────────────────────────────────────────────────────────────────────────────
+
+public void OnClientPutInServer(int client)
+{
+    if (!MM_IsValidClient(client))
+        return;
+
+    // Short delay to let the client finish loading before the team change
+    CreateTimer(0.5, Timer_ForceSpectator, GetClientUserId(client));
+}
+
+public Action Timer_ForceSpectator(Handle timer, any userid)
+{
+    int client = GetClientOfUserId(userid);
+    if (!MM_IsValidClient(client))
+        return Plugin_Stop;
+
+    if (GetClientTeam(client) != CS_TEAM_SPECTATOR)
+        ChangeClientTeam(client, CS_TEAM_SPECTATOR);
+
+    return Plugin_Stop;
+}
+
+// Block any attempt to join CT or T — only spectator is allowed
+public Action Listener_JoinTeam(int client, const char[] command, int argc)
+{
+    if (!MM_IsValidClient(client))
+        return Plugin_Continue;
+
+    if (argc < 1)
+        return Plugin_Handled;  // block bare jointeam with no team arg
+
+    char arg[4];
+    GetCmdArg(1, arg, sizeof(arg));
+    int team = StringToInt(arg);
+
+    if (team == CS_TEAM_CT || team == CS_TEAM_T)
+    {
+        PrintHintText(client,
+            "[MM] This is a lobby-only server — no gameplay here.\nType !queue to find a competitive match.");
+        return Plugin_Handled;
+    }
+
+    return Plugin_Continue;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
