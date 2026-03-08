@@ -382,3 +382,160 @@ SET @sql = IF(@col_exists = 0,
 PREPARE _migration FROM @sql;
 EXECUTE _migration;
 DEALLOCATE PREPARE _migration;
+
+-- ============================================================
+-- PHASE 1 MIGRATIONS
+-- ============================================================
+
+-- 1.2 — ELO notification flag on mm_match_players
+-- Tracks whether the post-match ELO change has been shown to the player
+-- on the lobby server on their next login.
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'mm_match_players'
+    AND COLUMN_NAME  = 'elo_notified'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE mm_match_players ADD COLUMN elo_notified TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1 once the ELO change has been displayed to the player in-game'' AFTER elo_change',
+  'SELECT 1 /* elo_notified already exists */'
+);
+PREPARE _migration FROM @sql;
+EXECUTE _migration;
+DEALLOCATE PREPARE _migration;
+
+-- 1.3 — Abandon tracking on mm_players
+-- Used to implement progressive ban escalation with time-based decay.
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'mm_players'
+    AND COLUMN_NAME  = 'abandon_count'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE mm_players ADD COLUMN abandon_count INT NOT NULL DEFAULT 0 COMMENT ''Number of live-match abandons (decays after 14 days of good behaviour)'' AFTER ban_until',
+  'SELECT 1 /* abandon_count already exists */'
+);
+PREPARE _migration FROM @sql;
+EXECUTE _migration;
+DEALLOCATE PREPARE _migration;
+
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'mm_players'
+    AND COLUMN_NAME  = 'last_abandon_at'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE mm_players ADD COLUMN last_abandon_at DATETIME NULL COMMENT ''Timestamp of most recent match abandon, used for decay calculation'' AFTER abandon_count',
+  'SELECT 1 /* last_abandon_at already exists */'
+);
+PREPARE _migration FROM @sql;
+EXECUTE _migration;
+DEALLOCATE PREPARE _migration;
+
+-- 4.1 — Surrender flag on mm_matches
+-- Distinguishes a surrender finish from a normal score-based finish.
+-- When surrendered=1, the losing team is the one that called !ff,
+-- regardless of the score at the time.
+SET @col_exists = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME   = 'mm_matches'
+    AND COLUMN_NAME  = 'surrendered'
+);
+SET @sql = IF(@col_exists = 0,
+  'ALTER TABLE mm_matches ADD COLUMN surrendered TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1 if the match ended via a surrender vote'' AFTER cancel_reason',
+  'SELECT 1 /* surrendered already exists */'
+);
+PREPARE _migration FROM @sql;
+EXECUTE _migration;
+DEALLOCATE PREPARE _migration;
+
+-- ============================================================
+-- PHASE 3 MIGRATIONS — Party system
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mm_parties (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  leader_id   VARCHAR(32)   NOT NULL COMMENT 'SteamID of the party leader',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_leader (leader_id),
+  CONSTRAINT fk_party_leader FOREIGN KEY (leader_id)
+    REFERENCES mm_players (steam_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB COMMENT='Active party groups (max 5 members)';
+
+CREATE TABLE IF NOT EXISTS mm_party_members (
+  party_id    INT UNSIGNED  NOT NULL,
+  steam_id    VARCHAR(32)   NOT NULL,
+  joined_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (party_id, steam_id),
+  CONSTRAINT fk_pm_party  FOREIGN KEY (party_id)  REFERENCES mm_parties  (id)       ON DELETE CASCADE,
+  CONSTRAINT fk_pm_player FOREIGN KEY (steam_id)  REFERENCES mm_players  (steam_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB COMMENT='Party membership (one row per member including leader)';
+
+CREATE TABLE IF NOT EXISTS mm_party_invites (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  party_id    INT UNSIGNED  NOT NULL,
+  invitee_id  VARCHAR(32)   NOT NULL COMMENT 'Steam ID of invited player',
+  invited_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at  DATETIME      NOT NULL COMMENT 'Auto-expire after 60 seconds',
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_invite (party_id, invitee_id),
+  CONSTRAINT fk_pi_party FOREIGN KEY (party_id) REFERENCES mm_parties (id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='Pending party invitations';
+
+-- ============================================================
+-- PHASE 4 MIGRATIONS — Report system
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mm_reports (
+  id            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  reporter_id   VARCHAR(32)   NOT NULL,
+  reported_id   VARCHAR(32)   NOT NULL,
+  match_id      INT           NOT NULL,
+  reason        ENUM('cheating','griefing','toxic','afk','other') NOT NULL,
+  details       VARCHAR(255)  NULL,
+  created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1 once an admin has reviewed this report',
+  PRIMARY KEY (id),
+  -- One report per reporter per reported player per match
+  UNIQUE KEY uq_report (reporter_id, reported_id, match_id),
+  INDEX idx_reported (reported_id, reviewed),
+  CONSTRAINT fk_report_reporter FOREIGN KEY (reporter_id) REFERENCES mm_players (steam_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_report_reported FOREIGN KEY (reported_id) REFERENCES mm_players (steam_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_report_match    FOREIGN KEY (match_id)    REFERENCES mm_matches (id)       ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='In-game player reports (cheating, griefing, AFK, toxic)';
+
+-- ============================================================
+-- PHASE 6 MIGRATIONS — Social features
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mm_avoid_list (
+  steam_id    VARCHAR(32)   NOT NULL COMMENT 'Player who set the avoid',
+  avoided_id  VARCHAR(32)   NOT NULL COMMENT 'Player being avoided',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at  DATETIME      NOT NULL COMMENT 'Auto-expire after 7 days',
+  PRIMARY KEY (steam_id, avoided_id),
+  INDEX idx_expires (expires_at),
+  CONSTRAINT fk_avoid_player  FOREIGN KEY (steam_id)   REFERENCES mm_players (steam_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_avoid_avoided FOREIGN KEY (avoided_id) REFERENCES mm_players (steam_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB COMMENT='Avoid list: avoids two players from being in the same match (7-day TTL)';
+
+-- ============================================================
+-- PHASE 8 MIGRATIONS — Admin management
+-- ============================================================
+
+-- Web panel admin accounts with role-based access control.
+-- No FK to mm_players: the super admin may not have played yet.
+-- Seeded automatically from SUPER_ADMIN_STEAM_ID env var on first startup.
+CREATE TABLE IF NOT EXISTS mm_admins (
+  steam_id    VARCHAR(32)   NOT NULL COMMENT 'Steam ID of the admin',
+  role        ENUM('superadmin','admin','moderator') NOT NULL DEFAULT 'moderator',
+  added_by    VARCHAR(32)   NULL     COMMENT 'Steam ID who granted access, NULL=system seed',
+  notes       VARCHAR(255)  NULL     COMMENT 'Optional label (e.g. name/alias)',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login  DATETIME      NULL,
+  PRIMARY KEY (steam_id)
+) ENGINE=InnoDB COMMENT='Web-panel admin roster with role-based permissions';
