@@ -33,6 +33,25 @@ generate_systemd_services() {
     systemctl enable csgo-lobby csgo-matchmaker csgo-webpanel 2>/dev/null \
         || warn "Could not enable one or more services"
 
+    _configure_firewall
+
+    info "Starting services..."
+    # Start matchmaker and web panel immediately; lobby requires CS:GO files
+    systemctl start csgo-matchmaker 2>/dev/null \
+        && ok "csgo-matchmaker started" \
+        || warn "csgo-matchmaker could not be started — check: journalctl -u csgo-matchmaker"
+    systemctl start csgo-webpanel 2>/dev/null \
+        && ok "csgo-webpanel started" \
+        || warn "csgo-webpanel could not be started — check: journalctl -u csgo-webpanel"
+    if [[ -f "${CSGO_DIR}/srcds_run" ]]; then
+        systemctl start csgo-lobby 2>/dev/null \
+            && ok "csgo-lobby started" \
+            || warn "csgo-lobby could not be started — check: journalctl -u csgo-lobby"
+    else
+        warn "CS:GO files not found — csgo-lobby will start automatically once they are downloaded."
+        info "Start it manually later with: sudo systemctl start csgo-lobby"
+    fi
+
     ok "All systemd services configured and enabled"
     INSTALLED_COMPONENTS+=("systemd-services")
     ROLLBACK_ACTIONS+=("systemctl disable csgo-lobby csgo-matchmaker csgo-webpanel 2>/dev/null; \
@@ -40,6 +59,73 @@ generate_systemd_services() {
               /etc/systemd/system/csgo-matchmaker.service \
               /etc/systemd/system/csgo-webpanel.service; \
         systemctl daemon-reload")
+}
+
+# ── Firewall configuration ─────────────────────────────────────────────────────
+
+_configure_firewall() {
+    local match_port_end=$(( MATCH_PORT_START + MATCH_SLOTS - 1 ))
+    local ports_to_open=(
+        "${LOBBY_PORT}/udp"           # CS:GO Lobby server (game traffic)
+        "${LOBBY_PORT}/tcp"           # CS:GO Lobby server (RCON + Steam)
+        "${WEB_PORT}/tcp"             # Web panel (HTTP)
+    )
+    # Add match server port range
+    for (( p=MATCH_PORT_START; p<=match_port_end; p++ )); do
+        ports_to_open+=("${p}/udp" "${p}/tcp")
+    done
+
+    if command -v ufw &>/dev/null; then
+        info "Configuring UFW firewall rules..."
+        ufw allow "${LOBBY_PORT}/udp"   comment 'CSGO-MM Lobby (game)' 2>/dev/null || true
+        ufw allow "${LOBBY_PORT}/tcp"   comment 'CSGO-MM Lobby (RCON)' 2>/dev/null || true
+        ufw allow "${WEB_PORT}/tcp"     comment 'CSGO-MM Web Panel'    2>/dev/null || true
+        if (( MATCH_SLOTS > 0 )); then
+            ufw allow "${MATCH_PORT_START}:${match_port_end}/udp" \
+                comment 'CSGO-MM Match Servers (game)'  2>/dev/null || true
+            ufw allow "${MATCH_PORT_START}:${match_port_end}/tcp" \
+                comment 'CSGO-MM Match Servers (RCON)'  2>/dev/null || true
+        fi
+        ok "UFW rules added (lobby: ${LOBBY_PORT}, web: ${WEB_PORT}, match: ${MATCH_PORT_START}-${match_port_end})"
+        INSTALLED_COMPONENTS+=("firewall-ufw")
+
+    elif command -v firewall-cmd &>/dev/null; then
+        info "Configuring firewalld rules..."
+        firewall-cmd --permanent --add-port="${LOBBY_PORT}/udp"  2>/dev/null || true
+        firewall-cmd --permanent --add-port="${LOBBY_PORT}/tcp"  2>/dev/null || true
+        firewall-cmd --permanent --add-port="${WEB_PORT}/tcp"    2>/dev/null || true
+        if (( MATCH_SLOTS > 0 )); then
+            firewall-cmd --permanent \
+                --add-port="${MATCH_PORT_START}-${match_port_end}/udp" 2>/dev/null || true
+            firewall-cmd --permanent \
+                --add-port="${MATCH_PORT_START}-${match_port_end}/tcp" 2>/dev/null || true
+        fi
+        firewall-cmd --reload 2>/dev/null || true
+        ok "firewalld rules added (lobby: ${LOBBY_PORT}, web: ${WEB_PORT}, match: ${MATCH_PORT_START}-${match_port_end})"
+        INSTALLED_COMPONENTS+=("firewall-firewalld")
+
+    elif command -v iptables &>/dev/null; then
+        info "Configuring iptables rules..."
+        iptables -I INPUT -p udp --dport "${LOBBY_PORT}" -j ACCEPT 2>/dev/null || true
+        iptables -I INPUT -p tcp --dport "${LOBBY_PORT}" -j ACCEPT 2>/dev/null || true
+        iptables -I INPUT -p tcp --dport "${WEB_PORT}"   -j ACCEPT 2>/dev/null || true
+        if (( MATCH_SLOTS > 0 )); then
+            iptables -I INPUT -p udp \
+                --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
+            iptables -I INPUT -p tcp \
+                --dport "${MATCH_PORT_START}:${match_port_end}" -j ACCEPT 2>/dev/null || true
+        fi
+        ok "iptables rules added (lobby: ${LOBBY_PORT}, web: ${WEB_PORT}, match: ${MATCH_PORT_START}-${match_port_end})"
+        warn "iptables rules are not persistent. Install 'iptables-persistent' to keep them across reboots."
+        INSTALLED_COMPONENTS+=("firewall-iptables")
+
+    else
+        warn "No firewall tool found (ufw / firewall-cmd / iptables)."
+        warn "You must manually open these ports:"
+        warn "  UDP+TCP ${LOBBY_PORT}                         (lobby server)"
+        warn "  TCP     ${WEB_PORT}                           (web panel)"
+        warn "  UDP+TCP ${MATCH_PORT_START}–${match_port_end} (match servers)"
+    fi
 }
 
 # ── Systemd unit writers ───────────────────────────────────────────────────────
@@ -333,55 +419,110 @@ print_summary() {
 
     printf '\n%s' "${GREEN}"
     printf '╔══════════════════════════════════════════════════════════════════════╗\n'
-    printf '║                  Installation Complete!                             ║\n'
+    printf '║           CS:GO Matchmaking — Installation Complete!                ║\n'
     printf '╚══════════════════════════════════════════════════════════════════════╝\n'
-    printf '%s\n\n' "${RESET}"
-    printf '  Your CS:GO Matchmaking system is ready!\n\n'
-    printf '%s=== Quick Reference ===%s\n\n' "${BOLD}" "${RESET}"
+    printf '%s\n' "${RESET}"
 
-    if [[ "${OS_TYPE}" == "linux" ]]; then
-        printf '  %sStart services:%s\n'  "${BOLD}" "${RESET}"
-        printf '    sudo systemctl start csgo-lobby csgo-matchmaker csgo-webpanel\n\n'
-        printf '  %sStop services:%s\n'   "${BOLD}" "${RESET}"
-        printf '    sudo systemctl stop csgo-lobby csgo-matchmaker csgo-webpanel\n\n'
-        printf '  %sView logs:%s\n'       "${BOLD}" "${RESET}"
-        printf '    sudo journalctl -u csgo-matchmaker -f\n'
-        printf '    sudo journalctl -u csgo-lobby -f\n'
-        printf '    sudo journalctl -u csgo-webpanel -f\n\n'
-    else
-        printf '  %sStart matchmaker (macOS dev):%s\n' "${BOLD}" "${RESET}"
-        printf '    source %s\n' "${CONFIG_FILE}"
-        printf '    %s/bin/python matchmaker/matchmaker.py\n\n' "${MATCHMAKER_VENV}"
-    fi
-
-    printf '  %sConnect to lobby (from CS:GO):%s\n' "${BOLD}" "${RESET}"
-    printf '    connect %s:%s\n\n' "${SERVER_IP}" "${LOBBY_PORT}"
-    printf '  %sWeb panel:%s\n' "${BOLD}" "${RESET}"
-    printf '    http://%s:%s\n\n' "${SERVER_IP}" "${WEB_PORT}"
-    printf '  %sMatch server ports:%s\n' "${BOLD}" "${RESET}"
-    printf '    %s–%s (%s slots)\n\n' "${MATCH_PORT_START}" "${match_port_end}" "${MATCH_SLOTS}"
-    printf '  %sIn-game commands:%s\n' "${BOLD}" "${RESET}"
-    printf '    !queue  — Join matchmaking queue\n'
-    printf '    !leave  — Leave queue\n'
-    printf '    !rank   — Show your ELO rank\n'
-    printf '    !top    — View leaderboard\n\n'
-    printf '  %sSystem management:%s\n' "${BOLD}" "${RESET}"
-    printf '    ./scripts/health_check.sh    — Check system health\n'
-    printf '    ./scripts/backup.sh          — Backup database\n'
-    printf '    sudo ./install.sh --update   — Update installation\n\n'
-    printf '  %sImportant files:%s\n' "${BOLD}" "${RESET}"
-    printf '    Config:  %s\n' "${CONFIG_FILE}"
-    printf '    Log:     %s\n' "${LOG_FILE}"
-    printf '    CS:GO:   %s\n' "${CSGO_DIR}"
-    printf '\n'
-
+    # ── Installed components ────────────────────────────────────────────────────
     if [[ ${#INSTALLED_COMPONENTS[@]} -gt 0 ]]; then
-        printf '  %sInstalled components:%s\n' "${BOLD}" "${RESET}"
+        printf '%s  Installed components:%s\n' "${BOLD}" "${RESET}"
         for component in "${INSTALLED_COMPONENTS[@]}"; do
             printf '    %s✓%s %s\n' "${GREEN}" "${RESET}" "${component}"
         done
         printf '\n'
     fi
 
-    printf '%s  To re-run this wizard:  sudo ./install.sh%s\n\n' "${DIM}" "${RESET}"
+    # ── Access URLs ─────────────────────────────────────────────────────────────
+    printf '%s=== Access URLs ===%s\n\n' "${BOLD}" "${RESET}"
+    printf '  %sWeb panel (players):%s\n'   "${BOLD}" "${RESET}"
+    printf '    http://%s:%s\n\n'           "${SERVER_IP}" "${WEB_PORT}"
+    printf '  %sAdmin panel:%s\n'           "${BOLD}" "${RESET}"
+    printf '    http://%s:%s/admin/\n\n'    "${SERVER_IP}" "${WEB_PORT}"
+    printf '  %sLobby server (from CS:GO):%s\n' "${BOLD}" "${RESET}"
+    printf '    connect %s:%s\n\n'          "${SERVER_IP}" "${LOBBY_PORT}"
+
+    # ── Admin first login ───────────────────────────────────────────────────────
+    printf '%s=== Admin Panel — First Login ===%s\n\n' "${BOLD}" "${RESET}"
+    if [[ -n "${SUPER_ADMIN_STEAM_ID:-}" ]]; then
+        printf '  %s✓ Super-admin Steam ID configured: %s%s%s\n\n' \
+            "${GREEN}" "${BOLD}" "${SUPER_ADMIN_STEAM_ID}" "${RESET}"
+        printf '  Steps to access the admin panel:\n'
+        printf '    1. Open:  http://%s:%s\n' "${SERVER_IP}" "${WEB_PORT}"
+        printf '    2. Click %s"Login through Steam"%s (top right corner)\n' "${BOLD}" "${RESET}"
+        printf '    3. Sign in with Steam account matching: %s%s%s\n' "${BOLD}" "${SUPER_ADMIN_STEAM_ID}" "${RESET}"
+        printf '    4. Click the %s"⚙ Admin"%s button that appears in the navbar\n\n' "${BOLD}" "${RESET}"
+    else
+        printf '  %s⚠  No super-admin Steam ID was configured!%s\n' "${YELLOW}" "${RESET}"
+        printf '  The admin panel will be inaccessible until you set one.\n\n'
+        printf '  Fix:\n'
+        printf '    1. Find your Steam ID at: https://steamid.io\n'
+        printf '    2. Edit: %s\n' "${CONFIG_FILE}"
+        printf '       Set:  SUPER_ADMIN_STEAM_ID=STEAM_0:0:XXXXXXXX\n'
+        printf '    3. sudo systemctl restart csgo-webpanel\n'
+        printf '    4. Open http://%s:%s and click "Login through Steam"\n\n' "${SERVER_IP}" "${WEB_PORT}"
+    fi
+
+    # ── Service status ──────────────────────────────────────────────────────────
+    printf '%s=== Service Status ===%s\n\n' "${BOLD}" "${RESET}"
+    if [[ "${OS_TYPE}" == "linux" ]]; then
+        for svc in csgo-webpanel csgo-matchmaker csgo-lobby; do
+            local svc_status
+            svc_status="$(systemctl is-active "${svc}" 2>/dev/null || echo 'inactive')"
+            if [[ "${svc_status}" == "active" ]]; then
+                printf '  %s●%s %-22s %srunning%s\n' "${GREEN}" "${RESET}" "${svc}" "${GREEN}" "${RESET}"
+            else
+                printf '  %s○%s %-22s %s%s%s\n' "${RED}" "${RESET}" "${svc}" "${YELLOW}" "${svc_status}" "${RESET}"
+            fi
+        done
+        printf '\n'
+        printf '  %sStart all:%s  sudo systemctl start csgo-lobby csgo-matchmaker csgo-webpanel\n' "${BOLD}" "${RESET}"
+        printf '  %sStop all:%s   sudo systemctl stop  csgo-lobby csgo-matchmaker csgo-webpanel\n' "${BOLD}" "${RESET}"
+        printf '  %sView logs:%s\n' "${BOLD}" "${RESET}"
+        printf '    sudo journalctl -u csgo-webpanel   -f    # Web panel logs\n'
+        printf '    sudo journalctl -u csgo-matchmaker -f    # Matchmaker logs\n'
+        printf '    sudo journalctl -u csgo-lobby      -f    # Lobby server logs\n\n'
+        if [[ ! -f "${CSGO_DIR}/srcds_run" ]]; then
+            printf '  %s⚠ CS:GO server files not yet downloaded — csgo-lobby is not running.%s\n' "${YELLOW}" "${RESET}"
+            printf '    To download CS:GO (~25 GB):\n'
+            printf '      sudo -u steam steamcmd +login anonymous \\\n'
+            printf '        +force_install_dir %s \\\n' "${CSGO_DIR}"
+            printf '        +app_update 740 validate +quit\n'
+            printf '    Then start the lobby: sudo systemctl start csgo-lobby\n\n'
+        fi
+    else
+        printf '  %sStart matchmaker (macOS dev):%s\n' "${BOLD}" "${RESET}"
+        printf '    source %s && %s/bin/python matchmaker/matchmaker.py\n\n' \
+            "${CONFIG_FILE}" "${MATCHMAKER_VENV}"
+    fi
+
+    # ── Network summary ─────────────────────────────────────────────────────────
+    printf '%s=== Network ===%s\n\n' "${BOLD}" "${RESET}"
+    printf '  %-30s %s\n' "Lobby server port:"    "${LOBBY_PORT} (UDP+TCP)"
+    printf '  %-30s %s\n' "Web panel port:"       "${WEB_PORT} (TCP)"
+    printf '  %-30s %s-%s (%s slots)\n' "Match server ports:" \
+        "${MATCH_PORT_START}" "${match_port_end}" "${MATCH_SLOTS}"
+    printf '\n'
+
+    # ── In-game commands ────────────────────────────────────────────────────────
+    printf '%s=== In-Game Commands ===%s\n\n' "${BOLD}" "${RESET}"
+    printf '  !queue      — Join matchmaking queue\n'
+    printf '  !leave      — Leave queue\n'
+    printf '  !status     — View queue position & estimated wait\n'
+    printf '  !rank       — Show your ELO rating and rank\n'
+    printf '  !top        — View top 5 players on the leaderboard\n'
+    printf '  !lastmatch  — Show stats from your last match\n'
+    printf '  !ff         — Start a surrender vote (in-match)\n'
+    printf '  !pause      — Request a tactical timeout (in-match)\n'
+    printf '  !report     — Report a player (in-match)\n\n'
+
+    # ── System management ───────────────────────────────────────────────────────
+    printf '%s=== System Management ===%s\n\n' "${BOLD}" "${RESET}"
+    printf '  %-42s %s\n' "Health check:"     "./scripts/health_check.sh"
+    printf '  %-42s %s\n' "Database backup:"  "./scripts/backup.sh"
+    printf '  %-42s %s\n' "Update install:"   "sudo ./install.sh --update"
+    printf '  %-42s %s\n' "Configuration:"    "${CONFIG_FILE}"
+    printf '  %-42s %s\n' "Install log:"      "${LOG_FILE}"
+    printf '\n'
+
+    printf '%s  To re-run the setup wizard at any time: sudo ./install.sh%s\n\n' "${DIM}" "${RESET}"
 }

@@ -15,6 +15,7 @@ setup_database() {
     _db_create_schema
     _db_insert_gslt_tokens
     _db_populate_port_pool
+    _db_populate_map_pool
     _db_verify
 
     INSTALLED_COMPONENTS+=("database")
@@ -144,6 +145,50 @@ FROM (
 ON DUPLICATE KEY UPDATE is_available=1, server_ip='${SERVER_IP}';
 MYSQL_PORTS
     ok "Server port range configured"
+}
+
+_db_populate_map_pool() {
+    [[ ${#SELECTED_MAPS[@]} -eq 0 ]] && return 0
+    local mysql_cmd
+    mysql_cmd="$(_db_root_cmd)"
+
+    # Map name → display name lookup
+    declare -A MAP_DISPLAY_NAMES=(
+        [de_dust2]="Dust II"
+        [de_mirage]="Mirage"
+        [de_inferno]="Inferno"
+        [de_nuke]="Nuke"
+        [de_overpass]="Overpass"
+        [de_vertigo]="Vertigo"
+        [de_ancient]="Ancient"
+        [de_anubis]="Anubis"
+        [de_cache]="Cache"
+        [de_train]="Train"
+    )
+
+    info "Configuring map pool (${#SELECTED_MAPS[@]} maps selected)..."
+
+    # Build a comma-separated quoted list of selected maps for SQL IN clause
+    local selected_sql_list=""
+    local insert_sql="USE csgo_matchmaking;"
+    for map in "${SELECTED_MAPS[@]}"; do
+        local display_name="${MAP_DISPLAY_NAMES[${map}]:-${map}}"
+        insert_sql+="
+INSERT INTO mm_map_pool (map_name, display_name, is_active, weight)
+  VALUES ('${map}', '${display_name}', 1, 1)
+  ON DUPLICATE KEY UPDATE is_active=1, display_name='${display_name}';"
+        [[ -n "${selected_sql_list}" ]] && selected_sql_list+=","
+        selected_sql_list+="'${map}'"
+    done
+
+    # Deactivate maps NOT in the selected list
+    insert_sql+="
+UPDATE mm_map_pool SET is_active=0
+  WHERE map_name NOT IN (${selected_sql_list});"
+
+    echo "${insert_sql}" | ${mysql_cmd} 2>/dev/null \
+        || warn "Could not update map pool (schema may not have been applied yet)"
+    ok "Map pool configured: ${SELECTED_MAPS[*]}"
 }
 
 _db_verify() {

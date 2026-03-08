@@ -43,6 +43,7 @@ _wizard_load_existing_config() {
     PLAYERS_PER_TEAM="${PLAYERS_PER_TEAM:-5}"
     MAX_ELO_SPREAD="${MAX_ELO_SPREAD:-200}"
     READY_CHECK_TIMEOUT="${READY_CHECK_TIMEOUT:-30}"
+    SUPER_ADMIN_STEAM_ID="${SUPER_ADMIN_STEAM_ID:-}"
     ok "Existing configuration loaded"
 }
 
@@ -240,6 +241,40 @@ _wizard_step_webpanel() {
         ok "Admin token retained from existing config"
     fi
 
+    # Super Admin Steam ID
+    printf '\n'
+    printf '  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${YELLOW}" "${RESET}"
+    printf '  %s Admin Panel Access%s\n' "${BOLD}" "${RESET}"
+    printf '  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n\n' "${YELLOW}" "${RESET}"
+    printf '  The web panel uses Steam login for authentication.\n'
+    printf '  The super admin account gets full control over the admin panel.\n\n'
+    printf '  To find your Steam ID:\n'
+    printf '    1. Go to %shttps://steamid.io%s and enter your profile URL\n' "${CYAN}" "${RESET}"
+    printf '    2. Copy the %sSteamID64%s (17-digit number, e.g. 76561198012345678)\n'  "${BOLD}" "${RESET}"
+    printf '       or the %sSteam2%s ID (e.g. STEAM_0:0:12345678)\n\n'  "${BOLD}" "${RESET}"
+
+    local steam_id_input=""
+    while true; do
+        steam_id_input="$(prompt "Enter your Steam ID (SteamID64 or STEAM_0:X:Y)" "${SUPER_ADMIN_STEAM_ID:-}")"
+        if [[ -z "${steam_id_input}" ]]; then
+            warn "No Steam ID entered. You can set SUPER_ADMIN_STEAM_ID in config.env later."
+            SUPER_ADMIN_STEAM_ID=""; break
+        elif [[ "${steam_id_input}" =~ ^7656[0-9]{13}$ ]]; then
+            # Convert SteamID64 to STEAM_0:X:Y
+            local base=76561197960265728
+            local val=$(( steam_id_input - base ))
+            SUPER_ADMIN_STEAM_ID="STEAM_0:$(( val % 2 )):$(( val / 2 ))"
+            ok "Super admin Steam ID: ${SUPER_ADMIN_STEAM_ID}"; break
+        elif [[ "${steam_id_input}" =~ ^STEAM_0:[01]:[0-9]+$ ]]; then
+            SUPER_ADMIN_STEAM_ID="${steam_id_input}"
+            ok "Super admin Steam ID: ${SUPER_ADMIN_STEAM_ID}"; break
+        else
+            error "Invalid format. Use a 17-digit SteamID64 or STEAM_0:0:XXXXXXXX"
+            confirm "Skip for now (set manually in config.env later)?" \
+                && { SUPER_ADMIN_STEAM_ID=""; warn "Super admin Steam ID not set — set SUPER_ADMIN_STEAM_ID in config.env before first use."; break; }
+        fi
+    done
+
     # Discord webhook
     if confirm "Enable Discord notifications?"; then
         while true; do
@@ -348,6 +383,7 @@ _wizard_print_summary() {
     printf '  %-35s %s\n' "Max ELO Spread:"     "${MAX_ELO_SPREAD}"
     printf '  %-35s %s\n' "Ready Timeout:"      "${READY_CHECK_TIMEOUT}s"
     printf '  %-35s %s\n' "Discord Webhook:"    "${DISCORD_WEBHOOK_URL:-(disabled)}"
+    printf '  %-35s %s\n' "Super Admin Steam ID:" "${SUPER_ADMIN_STEAM_ID:-(not set — set in config.env)}"
     printf '\n'
 
     confirm "Proceed with installation?" \

@@ -79,6 +79,7 @@ main() {
     download_csgo
     install_sourcemod
     install_lobby_plugins
+    install_match_server_plugins
     build_docker_image
     setup_matchmaker
     setup_webpanel

@@ -208,6 +208,64 @@ _install_serverredirect_plugin() {
     fi
 }
 
+install_match_server_plugins() {
+    print_section "Match Server Plugin Compilation"
+
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+        warn "Match server plugin compilation skipped on macOS (dev mode)."
+        return 0
+    fi
+
+    local match_plugins_src="${SCRIPT_DIR}/match-server/sourcemod"
+    local match_plugins_dst="${SCRIPT_DIR}/match-server/sourcemod/plugins"
+    mkdir -p "${match_plugins_dst}"
+
+    # Prefer spcomp from the lobby server's SourceMod installation (already set up)
+    local sm_dir="${CSGO_DIR}/csgo/addons/sourcemod"
+    local spcomp_bin=""
+    if [[ -x "${sm_dir}/scripting/spcomp" ]]; then
+        spcomp_bin="${sm_dir}/scripting/spcomp"
+    elif command -v spcomp &>/dev/null; then
+        spcomp_bin="$(command -v spcomp)"
+    fi
+
+    local compiled=0 failed=0
+    for sp_file in "${match_plugins_src}/scripting/"*.sp; do
+        [[ -f "${sp_file}" ]] || continue
+        local plugin_name
+        plugin_name="$(basename "${sp_file}" .sp)"
+        local smx_dst="${match_plugins_dst}/${plugin_name}.smx"
+
+        if [[ -n "${spcomp_bin}" ]]; then
+            info "Compiling match server plugin: ${plugin_name}.sp..."
+            if "${spcomp_bin}" "${sp_file}" \
+                    -o "${smx_dst}" \
+                    -i "${sm_dir}/scripting/include" \
+                    -i "${match_plugins_src}/scripting/include" 2>/dev/null; then
+                ok "Compiled: ${plugin_name}.smx → match-server/sourcemod/plugins/"
+                (( compiled++ ))
+            else
+                warn "Compilation failed for ${plugin_name}.sp"
+                warn "You can compile manually after install with:"
+                warn "  ${spcomp_bin} ${sp_file} -o ${smx_dst}"
+                (( failed++ ))
+            fi
+        else
+            warn "spcomp not found — cannot compile ${plugin_name}.sp."
+            warn "The match server plugin will not be active in the Docker image."
+            warn "To fix: after installing SourceMod, run:"
+            warn "  /opt/csgo-server/csgo/addons/sourcemod/scripting/spcomp \\"
+            warn "    ${sp_file} -o ${smx_dst}"
+            warn "  Then rebuild the Docker image: sudo docker build -t csgo-match-server:latest ${SCRIPT_DIR}/match-server"
+            (( failed++ ))
+        fi
+    done
+
+    (( compiled > 0 )) && ok "${compiled} match server plugin(s) compiled — Docker image will include them"
+    (( failed  > 0 )) && warn "${failed} match server plugin(s) could not be compiled"
+    return 0
+}
+
 # ── install_lobby_plugins private helpers ──────────────────────────────────────
 
 _deploy_plugin_binaries() {

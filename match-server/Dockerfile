@@ -4,7 +4,12 @@ LABEL maintainer="CSGO-Matchmaking Community"
 LABEL description="CS:GO Competitive Match Server with Matchmaking Integration"
 LABEL version="1.0.0"
 
-# Copy our Sourcemod plugins (compiled .smx and source .sp)
+# Copy our SourceMod plugins: compiled .smx binaries (required to load),
+# source .sp files (for reference / in-server recompilation), and configs.
+# The .smx files in sourcemod/plugins/ are compiled by install.sh before
+# this Docker image is built.
+COPY --chown=steam:steam sourcemod/plugins/ \
+    /home/steam/csgo-dedicated/csgo/addons/sourcemod/plugins/
 COPY --chown=steam:steam sourcemod/scripting/ \
     /home/steam/csgo-dedicated/csgo/addons/sourcemod/scripting/
 COPY --chown=steam:steam sourcemod/configs/ \
