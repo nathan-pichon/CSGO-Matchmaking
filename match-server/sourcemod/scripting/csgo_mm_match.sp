@@ -88,6 +88,7 @@ char g_sSteamId[MAXPLAYERS+1][32];
 
 enum MatchState {
     MatchState_Warmup,
+    MatchState_Knife,    // Knife round — winner chooses CT/T
     MatchState_Live,
     MatchState_Overtime,
     MatchState_Finished
@@ -111,6 +112,44 @@ Handle g_hCountdownTimer = null;
 
 // Redirect countdown seconds remaining
 int g_iRedirectCountdown = 15;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Knife round
+// ─────────────────────────────────────────────────────────────────────────────
+int  g_iKnifeKills[MAXPLAYERS+1];  // Kills during knife round
+int  g_iKnifeWinCSTeam = 0;        // CS_TEAM_CT / CS_TEAM_T that won knife (0=unknown)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map vote (up to 5 maps from mm_map_pool)
+// ─────────────────────────────────────────────────────────────────────────────
+char g_sMapVoteMaps[5][64];        // Internal map names
+char g_sMapVoteDisplay[5][64];     // Display names for menu
+int  g_iMapVoteCount = 0;          // Number of maps fetched
+int  g_iMapVotes[5];               // Vote tally per slot
+bool g_bMapVoteDone = false;       // Whether vote has concluded
+Handle g_hMapVoteTimer = null;     // 20-second expiry timer
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Surrender vote  (index 0 = team1, index 1 = team2)
+// ─────────────────────────────────────────────────────────────────────────────
+bool   g_bSurrenderVote[2];        // Active vote?
+int    g_iSurrenderYes[2];         // Current yes-vote count
+float  g_fSurrenderCooldown[2];    // GameTime() when next vote allowed
+Handle g_hSurrenderTimer[2];       // Vote expiry timers
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tactical pause  (index 0 = team1, index 1 = team2)
+// ─────────────────────────────────────────────────────────────────────────────
+int    g_iPausesLeft[2];           // Pauses remaining per team
+bool   g_bPauseRequested[2];       // Pause requested at next freeze time
+bool   g_bUnpauseReady[2];         // Team signaled ready to resume
+bool   g_bPaused = false;          // Match currently paused
+Handle g_hPauseTimer = null;       // Forced auto-unpause timer (60 s)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round counter — for surrender minimum rounds check
+// ─────────────────────────────────────────────────────────────────────────────
+int  g_iRoundsPlayed = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnPluginStart — entry point
@@ -145,7 +184,17 @@ public void OnPluginStart()
     // ------------------------------------------------------------------
     // Register chat commands
     // ------------------------------------------------------------------
-    RegConsoleCmd("sm_score", Cmd_Score, "Show current match score");
+    RegConsoleCmd("sm_score",     Cmd_Score,    "Show current match score");
+    RegConsoleCmd("sm_ff",        Cmd_Surrender, "Call a surrender vote for your team");
+    RegConsoleCmd("sm_surrender", Cmd_Surrender, "Call a surrender vote for your team");
+    RegConsoleCmd("sm_report",    Cmd_Report,    "Report a player: !report <name>");
+    RegConsoleCmd("sm_pause",     Cmd_Pause,     "Request tactical timeout");
+    RegConsoleCmd("sm_unpause",   Cmd_Unpause,   "Signal ready to resume after a pause");
+
+    // ------------------------------------------------------------------
+    // Hook additional game events
+    // ------------------------------------------------------------------
+    HookEvent("round_freeze_end", Event_FreezeEnd);
 
     // ------------------------------------------------------------------
     // Connect to database (async — callback fires when ready)
@@ -180,6 +229,36 @@ public void OnMapStart()
     // Reset match state
     g_eMatchState    = MatchState_Warmup;
     g_bAllConnected  = false;
+    g_iRoundsPlayed  = 0;
+    g_iKnifeWinCSTeam = 0;
+
+    // Reset surrender state
+    for (int t = 0; t < 2; t++)
+    {
+        g_bSurrenderVote[t]      = false;
+        g_iSurrenderYes[t]       = 0;
+        g_fSurrenderCooldown[t]  = 0.0;
+        CancelTimerSafe(g_hSurrenderTimer[t]);
+    }
+
+    // Reset pause state
+    g_iPausesLeft[0] = 1;
+    g_iPausesLeft[1] = 1;
+    g_bPauseRequested[0] = false;
+    g_bPauseRequested[1] = false;
+    g_bUnpauseReady[0]   = false;
+    g_bUnpauseReady[1]   = false;
+    g_bPaused            = false;
+    CancelTimerSafe(g_hPauseTimer);
+
+    // Reset map vote state
+    g_iMapVoteCount = 0;
+    g_bMapVoteDone  = false;
+    for (int i = 0; i < 5; i++) g_iMapVotes[i] = 0;
+    CancelTimerSafe(g_hMapVoteTimer);
+
+    // Reset knife kills
+    for (int i = 0; i <= MAXPLAYERS; i++) g_iKnifeKills[i] = 0;
 
     // Cancel any leftover timers from a previous round
     CancelTimerSafe(g_hCheckTimer);
@@ -194,6 +273,9 @@ public void OnMapStart()
 
     // Warmup timeout: if not all connected within 3 minutes, cancel match
     g_hWarmupTimer = CreateTimer(180.0, Timer_WarmupTimeout,     _, TIMER_FLAG_NO_MAPCHANGE);
+
+    // Start map vote 3 s after map load (gives players time to spawn in warmup)
+    CreateTimer(3.0, Timer_StartMapVote, _, TIMER_FLAG_NO_MAPCHANGE);
 
     // If DB already connected, update match status to warmup and query sides
     if (g_hDB != null && g_iMatchId > 0)
@@ -403,8 +485,8 @@ public Action Timer_CheckAllConnected(Handle timer)
 
     if (connectedCount >= totalExpected)
     {
-        // All players present — go live
-        StartMatch();
+        // All players present — start knife round
+        StartKnifeRound();
         g_hCheckTimer = null;
         return Plugin_Stop;
     }
@@ -417,27 +499,47 @@ public Action Timer_CheckAllConnected(Handle timer)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// StartMatch — transition from warmup to live
+// StartKnifeRound — transition from warmup → knife round
+// Called once all expected players are connected.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void StartMatch()
+void StartKnifeRound()
 {
     if (g_eMatchState != MatchState_Warmup)
         return;
 
     g_bAllConnected = true;
-    g_eMatchState   = MatchState_Live;
+    g_eMatchState   = MatchState_Knife;
 
     // Cancel warmup timeout — no longer needed
     CancelTimerSafe(g_hWarmupTimer);
+    CancelTimerSafe(g_hMapVoteTimer);
 
-    // Load competitive config (disables warmup, sets proper round timers)
-    ServerCommand("exec gamemode_competitive.cfg");
+    // Reset knife kills for accurate tracking
+    for (int i = 0; i <= MAXPLAYERS; i++) g_iKnifeKills[i] = 0;
+
+    ServerCommand("exec knife_round.cfg");
     ServerCommand("mp_warmup_end");
     ServerCommand("mp_restartgame 1");
 
-    MM_PrintToChatAll("\x04All players connected! Match is starting...");
-    LogMessage("[MM-Match] All players connected — match going live.");
+    MM_PrintToChatAll("\x04All players connected! Knife round starting — winner chooses side.");
+    LogMessage("[MM-Match] All players connected — knife round starting.");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StartLiveMatch — transition from knife → live
+// Called after the knife-round winner has chosen their side.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void StartLiveMatch()
+{
+    g_eMatchState = MatchState_Live;
+
+    ServerCommand("exec gamemode_competitive.cfg");
+    ServerCommand("mp_restartgame 3");
+
+    MM_PrintToChatAll("\x04Match is live! Good luck, have fun!");
+    LogMessage("[MM-Match] Match going live.");
 
     // Update DB status to 'live'
     if (g_hDB != null && g_iMatchId > 0)
@@ -493,12 +595,22 @@ public Action Timer_WarmupTimeout(Handle timer)
 public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
     #pragma unused name, dontBroadcast
+
+    int victim   = GetClientOfUserId(event.GetInt("userid"));
+    int attacker = GetClientOfUserId(event.GetInt("attacker"));
+
+    // Track kills during knife round for side-choice captain determination
+    if (g_eMatchState == MatchState_Knife)
+    {
+        if (IsValidClientIndex(attacker) && attacker != victim)
+            g_iKnifeKills[attacker]++;
+        return Plugin_Continue;
+    }
+
     // Only count stats during live play
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
 
-    int victim   = GetClientOfUserId(event.GetInt("userid"));
-    int attacker = GetClientOfUserId(event.GetInt("attacker"));
     int assister = GetClientOfUserId(event.GetInt("assister"));
     bool headshot = event.GetBool("headshot");
 
@@ -562,8 +674,27 @@ public Action Event_PlayerMVP(Event event, const char[] name, bool dontBroadcast
 public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
     #pragma unused name, dontBroadcast
+
+    // ── Knife round end: determine winner, offer side choice ──────────
+    if (g_eMatchState == MatchState_Knife)
+    {
+        int winner = event.GetInt("winner");  // CS_TEAM_CT or CS_TEAM_T
+        g_iKnifeWinCSTeam = winner;
+
+        char side[4];
+        Format(side, sizeof(side), (winner == CS_TEAM_CT) ? "CT" : "T");
+        MM_PrintToChatAll("\x04Knife round over! \x09%s\x04 wins — choosing side...", side);
+        LogMessage("[MM-Match] Knife round won by CS team %d (%s)", winner, side);
+
+        // Delay the menu by 2 s so the round-end panel fades
+        CreateTimer(2.0, Timer_ShowKnifeMenu, _, TIMER_FLAG_NO_MAPCHANGE);
+        return Plugin_Continue;
+    }
+
     if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
         return Plugin_Continue;
+
+    g_iRoundsPlayed++;
 
     // Snapshot the scoreboard score for each client at round end
     for (int i = 1; i <= MaxClients; i++)
@@ -673,6 +804,11 @@ public Action Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
         // Save all player stats (async, threaded)
         SaveAllPlayerStats();
     }
+
+    // ------------------------------------------------------------------
+    // Print per-player stats panel to every connected player
+    // ------------------------------------------------------------------
+    PrintEndOfMatchStats(team1Score, team2Score, winner);
 
     // ------------------------------------------------------------------
     // Schedule lobby redirect with countdown announcements
@@ -792,6 +928,7 @@ public Action Cmd_Score(int client, int args)
     switch (g_eMatchState)
     {
         case MatchState_Warmup:   strcopy(stateStr, sizeof(stateStr), "Warmup");
+        case MatchState_Knife:    strcopy(stateStr, sizeof(stateStr), "Knife");
         case MatchState_Live:     strcopy(stateStr, sizeof(stateStr), "Live");
         case MatchState_Overtime: strcopy(stateStr, sizeof(stateStr), "Overtime");
         case MatchState_Finished: strcopy(stateStr, sizeof(stateStr), "Finished");
@@ -941,4 +1078,638 @@ void CancelTimerSafe(Handle &hTimer)
         KillTimer(hTimer);
         hTimer = null;
     }
+}
+
+/**
+ * Returns 0 (team1 index) or 1 (team2 index) based on the client's SteamID.
+ * Returns -1 if the client is not on a known team.
+ */
+int GetPlayerTeamIndex(int client)
+{
+    if (!IsValidClientIndex(client) || g_sSteamId[client][0] == '\0')
+        return -1;
+
+    for (int i = 0; i < g_iTeam1Count; i++)
+    {
+        if (StrEqual(g_sTeam1SteamIds[i], g_sSteamId[client], false))
+            return 0;
+    }
+    for (int i = 0; i < g_iTeam2Count; i++)
+    {
+        if (StrEqual(g_sTeam2SteamIds[i], g_sSteamId[client], false))
+            return 1;
+    }
+    return -1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAP VOTE (Phase 5.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public Action Timer_StartMapVote(Handle timer)
+{
+    if (g_bMapVoteDone || g_hDB == null || g_eMatchState != MatchState_Warmup)
+        return Plugin_Stop;
+
+    char query[256];
+    Format(query, sizeof(query),
+        "SELECT map_name, display_name FROM mm_map_pool WHERE is_active=1 ORDER BY weight DESC LIMIT 5");
+    g_hDB.Query(CB_MapVoteList, query);
+    return Plugin_Stop;
+}
+
+public void CB_MapVoteList(Database db, DBResultSet results, const char[] error, any data)
+{
+    if (results == null || results.RowCount == 0)
+    {
+        // No maps in DB — skip vote, keep current map
+        g_bMapVoteDone = true;
+        LogMessage("[MM-Match] Map vote: no maps in pool, skipping vote.");
+        return;
+    }
+
+    g_iMapVoteCount = 0;
+    while (results.FetchRow() && g_iMapVoteCount < 5)
+    {
+        results.FetchString(0, g_sMapVoteMaps[g_iMapVoteCount], sizeof(g_sMapVoteMaps[]));
+        results.FetchString(1, g_sMapVoteDisplay[g_iMapVoteCount], sizeof(g_sMapVoteDisplay[]));
+        g_iMapVotes[g_iMapVoteCount] = 0;
+        g_iMapVoteCount++;
+    }
+
+    if (g_iMapVoteCount == 0)
+    {
+        g_bMapVoteDone = true;
+        return;
+    }
+
+    ShowMapVoteMenuToAll();
+
+    // Vote expires in 20 seconds
+    g_hMapVoteTimer = CreateTimer(20.0, Timer_MapVoteExpiry, _, TIMER_FLAG_NO_MAPCHANGE);
+    MM_PrintToChatAll("\x09Map vote started! \x04Vote for your map — closes in 20 seconds.");
+}
+
+void ShowMapVoteMenuToAll()
+{
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (MM_IsValidClient(i))
+            ShowMapVoteMenuToClient(i);
+    }
+}
+
+void ShowMapVoteMenuToClient(int client)
+{
+    Menu menu = new Menu(Menu_MapVoteHandler);
+    menu.SetTitle("Vote for Map:");
+    menu.ExitButton = false;
+
+    for (int i = 0; i < g_iMapVoteCount; i++)
+    {
+        char slotStr[4];
+        IntToString(i, slotStr, sizeof(slotStr));
+        menu.AddItem(slotStr, g_sMapVoteDisplay[i]);
+    }
+
+    menu.Display(client, 20);
+}
+
+public int Menu_MapVoteHandler(Menu menu, MenuAction action, int client, int param2)
+{
+    if (action == MenuAction_Select && !g_bMapVoteDone)
+    {
+        char slotStr[4];
+        menu.GetItem(param2, slotStr, sizeof(slotStr));
+        int slot = StringToInt(slotStr);
+        if (slot >= 0 && slot < g_iMapVoteCount)
+        {
+            g_iMapVotes[slot]++;
+            MM_PrintToChat(client, "You voted for \x04%s\x01.", g_sMapVoteDisplay[slot]);
+        }
+    }
+    else if (action == MenuAction_End)
+        delete menu;
+
+    return 0;
+}
+
+public Action Timer_MapVoteExpiry(Handle timer)
+{
+    g_hMapVoteTimer = null;
+    if (g_bMapVoteDone) return Plugin_Stop;
+    g_bMapVoteDone = true;
+
+    // Find winner (or pick weighted random on tie using weight index as tiebreaker)
+    int winSlot = 0;
+    for (int i = 1; i < g_iMapVoteCount; i++)
+    {
+        if (g_iMapVotes[i] > g_iMapVotes[winSlot])
+            winSlot = i;
+    }
+
+    MM_PrintToChatAll("\x04Map vote over! \x09%s\x04 wins with %d vote(s).",
+        g_sMapVoteDisplay[winSlot], g_iMapVotes[winSlot]);
+
+    // Check if the winning map is already loaded
+    char currentMap[64];
+    GetCurrentMap(currentMap, sizeof(currentMap));
+    if (!StrEqual(currentMap, g_sMapVoteMaps[winSlot], false))
+    {
+        MM_PrintToChatAll("Changing map to \x04%s\x01 in 5 seconds...", g_sMapVoteDisplay[winSlot]);
+
+        // Store winning map name in the match record
+        if (g_hDB != null && g_iMatchId > 0)
+        {
+            char escapedMap[64];
+            g_hDB.Escape(g_sMapVoteMaps[winSlot], escapedMap, sizeof(escapedMap));
+            char query[256];
+            Format(query, sizeof(query),
+                "UPDATE mm_matches SET map_name='%s' WHERE id=%d",
+                escapedMap, g_iMatchId);
+            g_hDB.Query(CB_GenericQuery, query);
+        }
+
+        // Stash winning map in slot 0 for use by Timer_DoChangelevel
+        strcopy(g_sMapVoteMaps[0], sizeof(g_sMapVoteMaps[]), g_sMapVoteMaps[winSlot]);
+        CreateTimer(5.0, Timer_DoChangelevel, _, TIMER_FLAG_NO_MAPCHANGE);
+    }
+
+    return Plugin_Stop;
+}
+
+public Action Timer_DoChangelevel(Handle timer)
+{
+    ServerCommand("changelevel %s", g_sMapVoteMaps[0]);
+    return Plugin_Stop;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KNIFE ROUND (Phase 5.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public Action Timer_ShowKnifeMenu(Handle timer)
+{
+    if (g_iKnifeWinCSTeam == 0) return Plugin_Stop;
+
+    // Find the captain (is_captain=1) or fallback to most knife kills
+    int captain = -1;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (!MM_IsValidClient(i)) continue;
+        int cs_team = GetClientTeam(i);
+        if (cs_team != g_iKnifeWinCSTeam) continue;
+
+        // Check if this player is the captain (is_captain=1 means highest ELO on their team)
+        // We use knife kills as tiebreaker — pick the one with most kills
+        if (captain == -1 || g_iKnifeKills[i] > g_iKnifeKills[captain])
+            captain = i;
+    }
+
+    if (captain == -1)
+    {
+        // Fallback: no one found — auto-choose, stay as is
+        StartLiveMatch();
+        return Plugin_Stop;
+    }
+
+    Menu menu = new Menu(Menu_KnifeWinnerSideChoice);
+    menu.SetTitle("Your team won the knife!\nChoose your starting side:");
+    menu.ExitButton = false;
+    menu.AddItem("stay",   "Stay CT");
+    menu.AddItem("switch", "Switch to T");
+    menu.Display(captain, 15);
+
+    MM_PrintToChatAll("\x04%N\x01 is choosing the starting side (15s)...", captain);
+
+    // Auto-choose after 15 s if no answer
+    CreateTimer(16.0, Timer_KnifeAutoChoose, GetClientUserId(captain), TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Stop;
+}
+
+public int Menu_KnifeWinnerSideChoice(Menu menu, MenuAction action, int client, int param2)
+{
+    if (action == MenuAction_Select)
+    {
+        if (g_eMatchState != MatchState_Knife) { delete menu; return 0; }
+
+        char choice[8];
+        menu.GetItem(param2, choice, sizeof(choice));
+
+        if (StrEqual(choice, "switch"))
+        {
+            // Swap teams
+            ServerCommand("mp_swapteams");
+            MM_PrintToChatAll("\x04%N chose to \x09Switch to T\x04 — teams swapped!", client);
+        }
+        else
+        {
+            MM_PrintToChatAll("\x04%N chose to \x09Stay CT\x04.", client);
+        }
+
+        StartLiveMatch();
+    }
+    else if (action == MenuAction_End)
+        delete menu;
+
+    return 0;
+}
+
+public Action Timer_KnifeAutoChoose(Handle timer, any userId)
+{
+    if (g_eMatchState != MatchState_Knife) return Plugin_Stop;
+
+    int client = GetClientOfUserId(userId);
+    if (client > 0)
+        MM_PrintToChatAll("\x0CSide choice timed out — \x04staying CT\x0C.", client);
+    else
+        MM_PrintToChatAll("\x0CSide choice timed out — staying CT.");
+
+    StartLiveMatch();
+    return Plugin_Stop;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// END-OF-MATCH STATS PANEL (Phase 5.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void PrintEndOfMatchStats(int team1Score, int team2Score, const char[] winner)
+{
+
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (!MM_IsValidClient(i) || g_sSteamId[i][0] == '\0') continue;
+
+        int teamIdx = GetPlayerTeamIndex(i);
+        char myResult[8];
+
+        if (StrEqual(winner, "tie"))
+            strcopy(myResult, sizeof(myResult), "Draw");
+        else if ((StrEqual(winner, "team1") && teamIdx == 0) ||
+                 (StrEqual(winner, "team2") && teamIdx == 1))
+            strcopy(myResult, sizeof(myResult), "Win");
+        else
+            strcopy(myResult, sizeof(myResult), "Loss");
+
+        int hs_pct = (g_iKills[i] > 0) ? RoundToNearest(float(g_iHeadshots[i]) * 100.0 / float(g_iKills[i])) : 0;
+
+        MM_PrintToChat(i, "\x09\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+        MM_PrintToChat(i, "\x04[MM] Match over \x01— %d - %d (\x04%s\x01)",
+            team1Score, team2Score, myResult);
+        MM_PrintToChat(i, "\x04[MM] Stats: \x01%dK / %dD / %dA | %d%% HS | %d dmg",
+            g_iKills[i], g_iDeaths[i], g_iAssists[i], hs_pct, g_iDamage[i]);
+        MM_PrintToChat(i, "\x04[MM] \x01Rating update coming shortly — check \x04!lastmatch\x01 on the lobby.");
+        MM_PrintToChat(i, "\x09\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TACTICAL PAUSE (Phase 5.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public Action Event_FreezeEnd(Event event, const char[] name, bool dontBroadcast)
+{
+    #pragma unused name, dontBroadcast
+    if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
+        return Plugin_Continue;
+
+    // Check if either team requested a pause
+    for (int t = 0; t < 2; t++)
+    {
+        if (g_bPauseRequested[t] && g_iPausesLeft[t] > 0)
+        {
+            g_bPauseRequested[t] = false;
+            g_bUnpauseReady[0]   = false;
+            g_bUnpauseReady[1]   = false;
+            g_bPaused            = true;
+            g_iPausesLeft[t]--;
+
+            ServerCommand("mp_pause_match");
+            MM_PrintToChatAll("\x09[MM] Team %d called a tactical timeout. (%d remaining) Type \x04!unpause\x09 when ready.",
+                t + 1, g_iPausesLeft[t]);
+
+            // Auto-unpause after 60 seconds
+            g_hPauseTimer = CreateTimer(60.0, Timer_AutoUnpause, _, TIMER_FLAG_NO_MAPCHANGE);
+            break;
+        }
+    }
+
+    return Plugin_Continue;
+}
+
+public Action Cmd_Pause(int client, int args)
+{
+    if (!MM_IsValidClient(client)) return Plugin_Handled;
+    if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
+    {
+        MM_PrintToChat(client, "[MM] Tactical timeout is only available during live play.");
+        return Plugin_Handled;
+    }
+
+    int teamIdx = GetPlayerTeamIndex(client);
+    if (teamIdx < 0)
+    {
+        MM_PrintToChat(client, "[MM] You are not on a registered team.");
+        return Plugin_Handled;
+    }
+
+    if (g_bPaused)
+    {
+        MM_PrintToChat(client, "[MM] Match is already paused. Type \x04!unpause\x01 when ready.");
+        return Plugin_Handled;
+    }
+
+    if (g_iPausesLeft[teamIdx] <= 0)
+    {
+        MM_PrintToChat(client, "[MM] Your team has no tactical timeouts remaining.");
+        return Plugin_Handled;
+    }
+
+    if (g_bPauseRequested[teamIdx])
+    {
+        MM_PrintToChat(client, "[MM] Pause already requested for your team — takes effect at next freeze time.");
+        return Plugin_Handled;
+    }
+
+    g_bPauseRequested[teamIdx] = true;
+    MM_PrintToChatAll("\x09[MM] Team %d requested a tactical timeout — takes effect at next freeze time.",
+        teamIdx + 1);
+
+    return Plugin_Handled;
+}
+
+public Action Cmd_Unpause(int client, int args)
+{
+    if (!MM_IsValidClient(client)) return Plugin_Handled;
+
+    if (!g_bPaused)
+    {
+        MM_PrintToChat(client, "[MM] Match is not paused.");
+        return Plugin_Handled;
+    }
+
+    int teamIdx = GetPlayerTeamIndex(client);
+    if (teamIdx < 0) return Plugin_Handled;
+
+    g_bUnpauseReady[teamIdx] = true;
+    MM_PrintToChatAll("\x04[MM] Team %d is ready to resume.", teamIdx + 1);
+
+    if (g_bUnpauseReady[0] && g_bUnpauseReady[1])
+    {
+        CancelTimerSafe(g_hPauseTimer);
+        g_bPaused          = false;
+        g_bUnpauseReady[0] = false;
+        g_bUnpauseReady[1] = false;
+        ServerCommand("mp_unpause_match");
+        MM_PrintToChatAll("\x04[MM] Match resumed!");
+    }
+    else
+    {
+        int otherTeam = (teamIdx == 0) ? 1 : 0;
+        if (!g_bUnpauseReady[otherTeam])
+            MM_PrintToChatAll("\x09[MM] Waiting for Team %d to type \x04!unpause\x09...", otherTeam + 1);
+    }
+
+    return Plugin_Handled;
+}
+
+public Action Timer_AutoUnpause(Handle timer)
+{
+    g_hPauseTimer = null;
+    if (!g_bPaused) return Plugin_Stop;
+
+    g_bPaused          = false;
+    g_bUnpauseReady[0] = false;
+    g_bUnpauseReady[1] = false;
+    ServerCommand("mp_unpause_match");
+    MM_PrintToChatAll("\x04[MM] Tactical timeout expired — match resumed automatically.");
+    return Plugin_Stop;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURRENDER VOTE (Phase 4.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public Action Cmd_Surrender(int client, int args)
+{
+    if (!MM_IsValidClient(client)) return Plugin_Handled;
+    if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
+    {
+        MM_PrintToChat(client, "[MM] Surrender vote is only available during live play.");
+        return Plugin_Handled;
+    }
+
+    if (g_iRoundsPlayed < 3)
+    {
+        MM_PrintToChat(client, "[MM] Surrender is only available after 3 rounds have been played.");
+        return Plugin_Handled;
+    }
+
+    int teamIdx = GetPlayerTeamIndex(client);
+    if (teamIdx < 0)
+    {
+        MM_PrintToChat(client, "[MM] You are not on a registered team.");
+        return Plugin_Handled;
+    }
+
+    if (g_bSurrenderVote[teamIdx])
+    {
+        // Vote in progress — cast a yes vote
+        g_iSurrenderYes[teamIdx]++;
+
+        // Count team size for threshold
+        int teamSize = (teamIdx == 0) ? g_iTeam1Count : g_iTeam2Count;
+        int needed   = (teamSize >= 5) ? 4 : (teamSize - 1);
+
+        MM_PrintToChatAll("\x09[MM] Surrender vote: \x04%d/%d\x09 yes votes (need %d).",
+            g_iSurrenderYes[teamIdx], teamSize, needed);
+
+        if (g_iSurrenderYes[teamIdx] >= needed)
+        {
+            CancelTimerSafe(g_hSurrenderTimer[teamIdx]);
+            g_bSurrenderVote[teamIdx] = false;
+            ExecuteSurrender(teamIdx);
+        }
+        return Plugin_Handled;
+    }
+
+    // Cooldown check
+    if (GetGameTime() < g_fSurrenderCooldown[teamIdx])
+    {
+        MM_PrintToChat(client, "[MM] Your team must wait before calling another surrender vote.");
+        return Plugin_Handled;
+    }
+
+    // Start new vote
+    g_bSurrenderVote[teamIdx]  = true;
+    g_iSurrenderYes[teamIdx]   = 1;  // Initiator counts as a yes
+    int teamSize = (teamIdx == 0) ? g_iTeam1Count : g_iTeam2Count;
+    int needed   = (teamSize >= 5) ? 4 : (teamSize - 1);
+
+    MM_PrintToChatAll("\x09[MM] \x04%N\x09 called a surrender vote for Team %d. (%d/%d needed — type \x04!ff\x09 to vote yes)",
+        client, teamIdx + 1, g_iSurrenderYes[teamIdx], needed);
+
+    // Expire in 30 seconds
+    DataPack pack = new DataPack();
+    pack.WriteCell(teamIdx);
+    g_hSurrenderTimer[teamIdx] = CreateTimer(30.0, Timer_SurrenderExpiry, pack, TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
+
+    return Plugin_Handled;
+}
+
+public Action Timer_SurrenderExpiry(Handle timer, DataPack pack)
+{
+    pack.Reset();
+    int teamIdx = pack.ReadCell();
+    g_hSurrenderTimer[teamIdx] = null;
+
+    if (!g_bSurrenderVote[teamIdx]) return Plugin_Stop;
+
+    g_bSurrenderVote[teamIdx]    = false;
+    g_iSurrenderYes[teamIdx]     = 0;
+    g_fSurrenderCooldown[teamIdx] = GetGameTime() + 120.0;
+
+    MM_PrintToChatAll("\x0C[MM] Surrender vote for Team %d failed — not enough yes votes.", teamIdx + 1);
+    return Plugin_Stop;
+}
+
+void ExecuteSurrender(int surrenderTeamIdx)
+{
+    // surrenderTeamIdx: 0 = team1 surrenders → team2 wins
+    if (g_eMatchState == MatchState_Finished) return;
+    g_eMatchState = MatchState_Finished;
+
+    CancelTimerSafe(g_hCheckTimer);
+    CancelTimerSafe(g_hWarmupTimer);
+
+    char winner[8];
+    Format(winner, sizeof(winner), (surrenderTeamIdx == 0) ? "team2" : "team1");
+
+    int ctScore = CS_GetTeamScore(CS_TEAM_CT);
+    int tScore  = CS_GetTeamScore(CS_TEAM_T);
+    int team1Score = (g_iTeam1CSTeam == CS_TEAM_CT) ? ctScore : tScore;
+    int team2Score = (g_iTeam1CSTeam == CS_TEAM_CT) ? tScore  : ctScore;
+
+    MM_PrintToChatAll("\x0C[MM] Team %d has surrendered! Team %d wins!",
+        surrenderTeamIdx + 1, (surrenderTeamIdx == 0) ? 2 : 1);
+
+    if (g_hDB != null && g_iMatchId > 0)
+    {
+        char query[512];
+        Format(query, sizeof(query),
+            "UPDATE mm_matches SET status='finished', team1_score=%d, team2_score=%d, winner='%s', surrendered=1, ended_at=NOW() WHERE id=%d",
+            team1Score, team2Score, winner, g_iMatchId);
+        g_hDB.Query(CB_GenericQuery, query);
+
+        SaveAllPlayerStats();
+    }
+
+    PrintEndOfMatchStats(team1Score, team2Score, winner);
+
+    g_iRedirectCountdown = 15;
+    CreateTimer(1.0, Timer_CountdownAnnounce, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORT SYSTEM (Phase 4.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Per-client: the target SteamID chosen when !report <name> was typed
+char g_sReportTarget[MAXPLAYERS+1][32];
+
+public Action Cmd_Report(int client, int args)
+{
+    if (!MM_IsValidClient(client)) return Plugin_Handled;
+    if (g_eMatchState != MatchState_Live && g_eMatchState != MatchState_Overtime)
+    {
+        MM_PrintToChat(client, "[MM] Reports can only be submitted during a live match.");
+        return Plugin_Handled;
+    }
+
+    if (args < 1)
+    {
+        MM_PrintToChat(client, "[MM] Usage: !report <player name>");
+        return Plugin_Handled;
+    }
+
+    char partialName[MAX_NAME_LENGTH];
+    GetCmdArgString(partialName, sizeof(partialName));
+
+    // Find target among in-game clients
+    int target = -1;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (i == client || !MM_IsValidClient(i)) continue;
+        char playerName[MAX_NAME_LENGTH];
+        GetClientName(i, playerName, sizeof(playerName));
+        if (StrContains(playerName, partialName, false) != -1)
+        {
+            target = i;
+            break;
+        }
+    }
+
+    if (target == -1)
+    {
+        MM_PrintToChat(client, "[MM] Player '%s' not found.", partialName);
+        return Plugin_Handled;
+    }
+
+    if (g_sSteamId[target][0] == '\0')
+    {
+        MM_PrintToChat(client, "[MM] Could not retrieve that player's Steam ID.");
+        return Plugin_Handled;
+    }
+
+    strcopy(g_sReportTarget[client], sizeof(g_sReportTarget[]), g_sSteamId[target]);
+
+    Menu menu = new Menu(Menu_ReportReasonHandler);
+    char title[128];
+    Format(title, sizeof(title), "Report %N for:", target);
+    menu.SetTitle(title);
+    menu.ExitButton = true;
+    menu.AddItem("cheating",  "Cheating");
+    menu.AddItem("griefing",  "Griefing");
+    menu.AddItem("afk",       "AFK");
+    menu.AddItem("toxic",     "Toxic behavior");
+    menu.Display(client, 20);
+
+    return Plugin_Handled;
+}
+
+public int Menu_ReportReasonHandler(Menu menu, MenuAction action, int client, int param2)
+{
+    if (action == MenuAction_Select)
+    {
+        if (g_hDB == null || g_iMatchId <= 0 || g_sReportTarget[client][0] == '\0')
+        {
+            MM_PrintToChat(client, "[MM] Could not submit report — database unavailable.");
+        }
+        else
+        {
+            char reason[16];
+            menu.GetItem(param2, reason, sizeof(reason));
+
+            char escReporter[64], escReported[64], escReason[32];
+            g_hDB.Escape(g_sSteamId[client], escReporter, sizeof(escReporter));
+            g_hDB.Escape(g_sReportTarget[client], escReported, sizeof(escReported));
+            g_hDB.Escape(reason, escReason, sizeof(escReason));
+
+            char query[512];
+            Format(query, sizeof(query),
+                "INSERT IGNORE INTO mm_reports (reporter_id, reported_id, match_id, reason) "
+                "VALUES ('%s', '%s', %d, '%s')",
+                escReporter, escReported, g_iMatchId, escReason);
+            g_hDB.Query(CB_GenericQuery, query);
+
+            MM_PrintToChat(client, "\x04[MM] Report submitted. Thank you.");
+        }
+
+        g_sReportTarget[client][0] = '\0';
+    }
+    else if (action == MenuAction_End)
+        delete menu;
+
+    return 0;
 }
