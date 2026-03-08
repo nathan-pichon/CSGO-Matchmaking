@@ -1955,18 +1955,26 @@ public void DB_AvoidListResult(Database db, DBResultSet results, const char[] er
         return;
     }
 
-    MM_PrintToChat(client, "[MM] Your avoid list:");
+    Panel panel = new Panel();
+    panel.SetTitle("Your Avoid List");
+    panel.DrawText("────────────────────────────────────");
     do
     {
         char name[64];
         results.FetchString(0, name, sizeof(name));
-        // expires_at is a datetime string
         char expiry[32];
         results.FetchString(1, expiry, sizeof(expiry));
-        // Trim to date only
-        expiry[10] = '\0';
-        MM_PrintToChat(client, "  \x04%s\x01 (expires %s)", name, expiry);
+        expiry[10] = '\0';  // trim datetime → date only
+        char line[96];
+        Format(line, sizeof(line), "%s  (expires %s)", name, expiry);
+        panel.DrawText(line);
     } while (results.FetchRow());
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawText("Use !avoid <name> to add a player.");
+    panel.DrawText("────────────────────────────────────");
+    panel.DrawItem("Close");
+    panel.Send(client, Panel_DisplayHandler, 15);
+    delete panel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
