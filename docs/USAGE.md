@@ -1,154 +1,216 @@
 # Usage Guide — CS:GO Matchmaking
 
-This document explains how to use the matchmaking system as a player, as well as the tools available to server administrators.
+This document explains how to use the matchmaking system as a player, and the tools available to server administrators.
 
 ---
 
 ## Table of Contents
 
-1. [Joining the Lobby](#joining-the-lobby)
-2. [Player Commands](#player-commands)
-3. [Matchmaking Flow](#matchmaking-flow)
-4. [Ready Check Phase](#ready-check-phase)
-5. [ELO Ranking System](#elo-ranking-system)
-6. [Admin Commands](#admin-commands)
-7. [Web Panel](#web-panel)
-8. [Lobby Management](#lobby-management)
+1. [Joining the Lobby](#1-joining-the-lobby)
+2. [Player Commands — Lobby Server](#2-player-commands--lobby-server)
+3. [In-Match Commands — Match Server](#3-in-match-commands--match-server)
+4. [Matchmaking Flow](#4-matchmaking-flow)
+5. [Ready Check Phase](#5-ready-check-phase)
+6. [ELO Ranking System](#6-elo-ranking-system)
+7. [Web Panel](#7-web-panel)
+8. [Admin Panel](#8-admin-panel)
+9. [In-Game Admin Commands](#9-in-game-admin-commands)
+10. [Lobby Management](#10-lobby-management)
 
 ---
 
-## Joining the Lobby
+## 1. Joining the Lobby
 
-The lobby is the entry point for all matches. Connect via the CS:GO console:
+The lobby is the entry point for all matches. Connect via the CS:GO console (`~` key):
 
 ```
-connect IP:27015
+connect YOUR_SERVER_IP:27015
 ```
 
-Replace `IP` with the public IP address of the server provided by your administrator.
+Once connected, all matchmaking commands are entered in the **in-game chat** (default key `Y`).
 
-Once connected to the lobby, you can join the queue and access all matchmaking commands from the in-game chat.
+> A **5-second cooldown** applies between most command uses to prevent spam.
 
 ---
 
-## Player Commands
-
-All commands are entered in the **in-game chat** (default key `Y`). A **5-second** cooldown applies between each command use to prevent abuse.
+## 2. Player Commands — Lobby Server
 
 ### Queue
 
-| Command                  | Description |
-|--------------------------|-------------|
-| `!queue` or `!q`         | Join the matchmaking queue with no map preference. The matchmaker will automatically select a map from the available pool. |
-| `!queue <map>`           | Join the queue expressing a preference for a specific map. The system will attempt to group players with the same preference. |
-| `!leave` or `!unqueue`   | Leave the matchmaking queue. Use this command before disconnecting to free up your slot. |
-| `!status`                | Display your current queue status: position, elapsed wait time, and map preference. |
+| Command | Description |
+|---------|-------------|
+| `!queue` / `!q` | Join the matchmaking queue with no map preference |
+| `!queue <map>` | Join with a map preference (e.g. `!queue de_mirage`) |
+| `!leave` / `!unqueue` | Leave the queue |
+| `!status` | Show your position in queue, elapsed wait time, and estimated match time |
 
-**Available Maps:**
+**Map identifiers:**
 
-| Identifier    | Map      |
-|---------------|----------|
-| `de_dust2`    | Dust II  |
-| `de_mirage`   | Mirage   |
-| `de_inferno`  | Inferno  |
-| `de_ancient`  | Ancient  |
-| `de_nuke`     | Nuke     |
-| `de_overpass` | Overpass |
-| `de_vertigo`  | Vertigo  |
-
-**Examples:**
-
-```
-!queue de_mirage
-!queue de_dust2
-!q
-!leave
-```
+| Identifier    | Display name |
+|---------------|--------------|
+| `de_dust2`    | Dust II      |
+| `de_mirage`   | Mirage       |
+| `de_inferno`  | Inferno      |
+| `de_ancient`  | Ancient      |
+| `de_nuke`     | Nuke         |
+| `de_overpass` | Overpass     |
+| `de_vertigo`  | Vertigo      |
 
 ### Stats and Rankings
 
-| Command  | Description |
-|----------|-------------|
-| `!rank`  | Display your current rank, ELO score, win/loss ratio (W/L), and kill/death ratio (K/D). |
-| `!top`   | Display the top 10 players on the server, sorted by ELO in descending order. |
-| `!stats` | Display your detailed statistics: total kills, deaths, assists, headshots, current win streak, best streak, win rate, and headshot percentage. |
+| Command | Description |
+|---------|-------------|
+| `!rank` | Your current ELO rating, rank tier, W/L ratio, and K/D |
+| `!top` | Top 10 players sorted by ELO |
+| `!stats` | Detailed career stats: kills, deaths, assists, headshots, streaks, win rate |
+| `!lastmatch` | Summary of your most recent match (map, score, K/D/A, ELO change) |
+| `!recent` | Players from your last 5 matches with their ranks |
 
 **Example `!rank` output:**
-
 ```
 [MM] YourName | Rank: Master Guardian I | ELO: 1042 | W/L: 18/12 | K/D: 1.24
 ```
 
-**Example `!stats` output:**
+**Example `!lastmatch` output:**
+```
+[MM] Last match on de_mirage — 16-9 (Win) | 22K 14D 5A | +24 ELO (1024 → 1048)
+```
 
-```
-[MM] YourName | Kills: 412 | Deaths: 332 | Assists: 87
-     Headshots: 198 (48%) | Current Streak: 3W | Best Streak: 7W
-     Win Rate: 60% | Matches Played: 30
-```
+### Party & Social
+
+| Command | Description |
+|---------|-------------|
+| `!party` | Show your current party and members' ELO |
+| `!party invite <name>` | Create a party (if you have none) and invite a player |
+| `!party accept` | Accept a pending party invitation |
+| `!party decline` | Decline a pending party invitation |
+| `!party leave` | Leave your current party (leadership transfers to the next member) |
+| `!party kick <name>` | Kick a member from your party (leader only) |
+| `!avoid <name>` | Avoid a player for 7 days — they won't be matched with you (max 10 active) |
+| `!avoidlist` | List your active avoids |
+
+**Party rules:**
+- Maximum 5 members per party
+- Maximum 400 ELO gap between any two party members
+- Only the party **leader** can start the queue — all members join together
+- If any member is banned from matchmaking, the queue is blocked until the ban expires
+- If the leader declines the ready check, all party members are removed from the queue (no penalty)
 
 ---
 
-## Matchmaking Flow
+## 3. In-Match Commands — Match Server
 
-Here is the complete flow of a match, from entering the queue to the end of the game.
+These commands are only available on the **match server** (after being redirected from the lobby).
+
+| Command | Description |
+|---------|-------------|
+| `!ff` / `!surrender` | Start a surrender vote for your team |
+| `!pause` | Request a tactical timeout at the next freeze time |
+| `!unpause` | Signal your team is ready to resume (both teams must confirm) |
+| `!report <name>` | Report a player for misconduct during the match |
+
+### Surrender vote (`!ff`)
+
+- Requires **4/5** of your team to vote yes (or **3/4** if a teammate has already abandoned)
+- Surrender is a **unconditional loss** regardless of the current score — the surrendering team loses ELO as if they lost
+- Once your team surrenders, the opposing team wins and ELO is calculated accordingly
+- **Cooldown**: 2 minutes between surrender vote attempts
+- **Vote window**: 30 seconds
+
+### Tactical pause (`!pause`)
+
+- Each team has **1 pause** per match (configurable via admin panel)
+- Pause takes effect at the **next freeze time** (end of current round)
+- **Maximum pause duration**: 60 seconds, then the match resumes automatically
+- Both teams must type `!unpause` to resume early
+- Announcement: `[MM] Tactical timeout called by Team X (Y pauses remaining)`
+
+### Player report (`!report`)
+
+- Available during any live or overtime round
+- Opens a menu to select a reason: **Cheating** / **Griefing** / **AFK** / **Toxic behavior**
+- One report per reporter/reported pair per match (duplicates are ignored)
+- Reports are reviewed by admins in the web panel at `/admin/reports`
+- Confirmation: `[MM] Report submitted against PlayerX`
+
+---
+
+## 4. Matchmaking Flow
 
 ```
 Player → connect IP:27015
          ↓
-    CS:GO Lobby
+    CS:GO Lobby Server
          ↓
-    !queue [map]
+    !queue [map_preference]
          ↓
-    Queue (mm_queue)
+    Queue (mm_queue table, status = waiting)
          ↓
     Matchmaker finds 10 ELO-compatible players
+         (avoid-list conflicts are checked and resolved before ready check)
          ↓
-    Ready Check phase (30 seconds)
+    Ready Check (30 seconds)
          ↓
     All players accept
          ↓
-    Docker container launched (dedicated match server)
+    Docker container launched on an available port
          ↓
-    All 10 players automatically connected to match server
+    All 10 players connected to match server via ServerRedirect
          ↓
-    Competitive 5v5 match (MR30, overtime enabled)
+    Warmup phase (max 180s to allow all players to connect)
          ↓
-    Match ends → Stats saved and ELO calculated
+    Map vote (20 seconds — players vote from the active map pool)
          ↓
-    15-second countdown
+    Knife round (1 round, knives only — winner picks CT or T)
          ↓
-    Automatic redirect back to lobby
+    Competitive MR12 match (with possible overtime)
+         ↓
+    Match ends → stats saved, ELO calculated
+         ↓
+    Post-match scoreboard shown in chat (15 seconds)
+         ↓
+    All players redirected back to lobby
 ```
 
-**Team formation details:**
+**Team formation (ELO snake draft):**
 
-Teams are composed via an **ELO-based snake draft**:
-- The 10 players are sorted by ELO in descending order.
-- Player 1 goes to Team A, player 2 to Team B, player 3 to Team B, player 4 to Team A, player 5 to Team A, and so on.
-- This system ensures a balanced distribution of skill levels between both teams.
+The 10 players are sorted by ELO descending, then distributed in snake order:
+- Pick 1 → Team A, Pick 2 → Team B, Pick 3 → Team B, Pick 4 → Team A, Pick 5 → Team A, …
 
----
+This ensures balanced skill distribution between both teams.
 
-## Ready Check Phase
+**Avoid-list check:**
 
-When the matchmaker has found 10 compatible players, a **confirmation window** appears on each player's screen.
-
-- The window shows: the selected map and a **30-second** countdown.
-- Click **ACCEPT** to confirm your participation.
-- If you click **DECLINE** or the timer expires without a response:
-  - You receive a **5-minute temporary ban** from the queue.
-  - Other players who had accepted are automatically returned to the queue.
-
-> If you need to step away briefly, use `!leave` before the ready check triggers to avoid a ban.
+Before sending the ready check, the matchmaker verifies that no two players in the candidate group have each other on their avoid lists. If a conflict is found, the more recently queued of the two is replaced and the process retries.
 
 ---
 
-## ELO Ranking System
+## 5. Ready Check Phase
+
+When 10 compatible players are found, each player's screen shows a confirmation panel:
+- **Map** selected for the match
+- **30-second countdown**
+
+**Click ACCEPT** to confirm participation.
+
+**If you click DECLINE or the timer expires:**
+- You are **removed from the queue** — no ban, no penalty
+- Other players who accepted are automatically returned to the queue with their original timestamp (their position is preserved)
+
+**If you are in a party and your teammate declines:**
+- All party members are removed from the queue
+- You receive: `[MM] Your teammate X declined. You have been removed from the queue.`
+- No penalty for any party member
+
+> **Tip**: If you need to step away, type `!leave` before the ready check triggers rather than letting it expire.
+
+---
+
+## 6. ELO Ranking System
 
 ### Starting Out
 
-Every new player starts with an ELO of **1000** (Master Guardian I).
+Every new player begins with an ELO of **1000** (Master Guardian I) and enters a **placement period** of 10 matches with higher ELO volatility.
 
 ### Tiers
 
@@ -175,130 +237,162 @@ Every new player starts with an ELO of **1000** (Master Guardian I).
 
 ### K-Factor
 
-ELO gains and losses per match depend on the **K-factor** applied to your profile:
+| Situation | K-Factor | Effect |
+|-----------|----------|--------|
+| Placement matches (< 10 matches) | **64** | Large swings for fast positioning |
+| Established (10–30 matches) | **32** | Standard swings |
+| Veteran (> 30 matches) | **24** | Smaller swings for greater stability |
 
-| Situation                                     | K-Factor | Effect |
-|-----------------------------------------------|----------|--------|
-| Placement matches (< 10 matches played)       | **64**   | Large swings for fast positioning |
-| Established player (10 to 30 matches)         | **32**   | Standard swings |
-| Veteran player (> 30 matches)                 | **24**   | Reduced swings for greater stability |
+### Special ELO rules
 
-### Progression
-
-- **Winning** earns ELO, **losing** costs ELO.
-- The number of points gained or lost depends on the ELO gap between the two teams: beating a stronger team earns more.
-- Individual performance (kills, headshots) does not directly influence ELO — only the match result matters.
+- **Abandoning** a live match: ELO is calculated as a loss regardless of your team's result, plus a progressive matchmaking ban (30 min → 7 days)
+- **Surrendering**: the surrendering team loses ELO as a defeat, independent of the score at the time of surrender
+- **Placement matches**: ELO swings faster so new players reach their correct tier quickly
 
 ---
 
-## Admin Commands
+## 7. Web Panel
 
-Admin commands require the **ADMFLAG_ROOT** flag (SourceMod root access). They are entered in the in-game chat with the `!` prefix.
+The web panel is at `http://YOUR_SERVER_IP:5000` (or the port configured during installation).
 
-| Command                                          | Description |
-|--------------------------------------------------|-------------|
-| `!mm_forcestart`                                 | Force-start a match with players currently in the queue. Requires a minimum of **2 players**. Useful for testing. |
-| `!mm_cancelqueue`                                | Cancel all waiting queue entries and return players to available status. |
-| `!mm_ban <#userid\|name> <minutes> <reason>`     | Ban a player from the matchmaking queue for a set duration in minutes. Use `#userid` (e.g. `#42`) or the player's name. |
-| `!mm_unban <STEAM_X:Y:Z>`                        | Lift a ban for a player identified by their SteamID (format `STEAM_0:1:12345678`). |
-| `!mm_setelo <#userid\|name> <elo>`               | Manually set a player's ELO. The value must be between **0 and 9999**. |
-| `!mm_resetrank <#userid\|name>`                  | Reset a player's ELO to the default value (**1000**) and reset their placement match counter. |
-| `!mm_status`                                     | Display a real-time summary: number of active matches, number of players in queue by status, and list of ongoing match servers. |
+### Public pages
 
-**Usage examples:**
+| URL | Description |
+|-----|-------------|
+| `/` | Landing page — live stats (players in queue, active matches), top players, recent matches, how-to guide |
+| `/leaderboard` | Full ELO leaderboard, paginated, filterable by season |
+| `/matches` | List of all completed matches |
+| `/match/<id>` | Full CS:GO-style scoreboard for one match, with ELO changes |
+| `/player/<steam_id>` | Player profile — ELO history chart, career stats, match history |
 
+### Signing in
+
+Click **Login** in the top-right corner. You are redirected to Steam's official OpenID login page. After authenticating, you return to your personal dashboard.
+
+> No account creation — your identity comes from your Steam account. No password is stored on this server.
+
+### Player dashboard
+
+After signing in, `/dashboard` shows:
+- Current rank badge and ELO rating
+- Win/Loss/Tie record with colour bar
+- Win rate and K/D ratio
+- ELO trend sparkline (last 20 data points)
+- Your 10 most recent matches with map, result, and ELO change
+
+### REST API
+
+JSON endpoints for external integrations (Discord bots, dashboards):
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/queue/count` | Number of players currently in queue |
+| `GET /api/player/<steam_id>` | Player profile in JSON (ELO, rank, stats) |
+| `GET /api/leaderboard` | Full leaderboard in JSON (`?season=N` filter available) |
+| `GET /api/matches` | Recent matches in JSON |
+
+---
+
+## 8. Admin Panel
+
+### Accessing the admin panel
+
+1. Sign in to the web panel with your Steam account (click **Login**)
+2. If your Steam ID is in the `mm_admins` table, an **⚙ Admin** button appears in the navbar
+3. Click **⚙ Admin** to enter `/admin/`
+
+> If you see the public panel but no Admin button, your Steam ID is not yet registered. Ask an existing superadmin to add you via `/admin/admins`, or set `SUPER_ADMIN_STEAM_ID` in `config.env` and restart `csgo-webpanel`.
+
+### Role hierarchy
+
+| Role | Permissions |
+|------|-------------|
+| `moderator` | View dashboard, manage bans, dismiss reports |
+| `admin` | All moderator actions + override player ELO |
+| `superadmin` | All admin actions + manage admins, manage seasons |
+
+### Admin pages
+
+| URL | Role required | Description |
+|-----|---------------|-------------|
+| `/admin/` | moderator+ | Live dashboard: active matches, queue count, ban count |
+| `/admin/bans` | moderator+ | View, issue, and remove matchmaking bans |
+| `/admin/reports` | moderator+ | Review player reports (3+ unique reporters in 30 days) |
+| `/admin/setelo` | admin+ | Manually override a player's ELO rating |
+| `/admin/admins` | superadmin | Add, remove, and change admin roles |
+| `/admin/seasons` | superadmin | Start a new competitive season with soft ELO reset |
+
+### Ban management
+
+- Ban by Steam ID (`STEAM_0:X:Y`) with a reason and duration in minutes (`0` = permanent)
+- Unban immediately from the same page
+- The system also issues **automatic bans** for match abandonment (progressive: 30 min → 2h → 24h → 7 days → 30 days)
+
+---
+
+## 9. In-Game Admin Commands
+
+Admin commands in the lobby server require the **ADMFLAG_ROOT** SourceMod flag. They are entered in the in-game chat.
+
+> Admin flags are granted automatically to players whose Steam ID appears in `mm_admins`. Manage admins through the web panel at `/admin/admins`.
+
+| Command | Description |
+|---------|-------------|
+| `!mm_forcestart` | Force-start a match with players currently in queue (minimum 2) |
+| `!mm_cancelqueue` | Cancel all waiting queue entries |
+| `!mm_ban <#userid\|name> <minutes> <reason>` | Ban a player from matchmaking |
+| `!mm_unban <STEAM_X:Y:Z>` | Remove a matchmaking ban |
+| `!mm_setelo <#userid\|name> <elo>` | Manually set a player's ELO (0–9999) |
+| `!mm_resetrank <#userid\|name>` | Reset a player's ELO to 1000 and restart placement |
+| `!mm_status` | Live summary: active matches, queue counts, active servers |
+
+**Examples:**
 ```
 !mm_ban #42 30 Toxic behaviour
 !mm_unban STEAM_0:1:12345678
 !mm_setelo TopFragger 1800
 !mm_resetrank #7
 !mm_forcestart
-!mm_status
 ```
 
-> Admin commands are logged in the SourceMod logs with the identity of the acting administrator.
+> All admin commands are logged in SourceMod logs with the acting administrator's identity.
 
 ---
 
-## Web Panel
+## 10. Lobby Management
 
-The web panel is accessible at `http://IP:5000` (replace `IP` with the server address).
+### AFK detection
 
-### Available Pages
+A player who remains in **spectator for 5 consecutive minutes** is automatically removed from the queue. They receive a chat notification and can re-queue by joining a team and typing `!queue`.
 
-| URL                       | Description |
-|---------------------------|-------------|
-| `/leaderboard`            | Paginated leaderboard of all players, sorted by ELO in descending order. Filterable by season. |
-| `/player/<steam_id>`      | Full player profile: ELO history chart, recent match history, detailed statistics. |
-| `/matches`                | List of recent matches with date, map, scores, and duration. |
-| `/match/<id>`             | Complete match dashboard: K/D/A, headshots, MVP, ELO change for each player. |
+### Queue expiry
 
-### REST API
+Queue entries expire after **15 minutes** if no match forms. The player is notified and must re-queue. This prevents orphaned database entries from silent disconnections.
 
-JSON endpoints are available for integrating data into external tools (Discord bots, websites, dashboards):
+### Automatic broadcast
 
-| Endpoint                   | Description |
-|----------------------------|-------------|
-| `GET /api/queue/count`     | Returns the current number of players in the queue. |
-| `GET /api/player/<id>`     | Returns a player's JSON profile (ELO, rank, statistics). |
-| `GET /api/leaderboard`     | Returns the full leaderboard in JSON format. Optional parameter: `?season=N`. |
-| `GET /api/matches`         | Returns the list of recent matches in JSON format. |
-
-**Example `/api/queue/count` response:**
-
-```json
-{
-  "count": 7,
-  "updated_at": "2026-03-05T14:32:11Z"
-}
-```
-
-**Example `/api/player/<id>` response:**
-
-```json
-{
-  "steam_id": "STEAM_0:1:12345678",
-  "name": "TopFragger",
-  "elo": 1842,
-  "rank": "Legendary Eagle Master",
-  "wins": 74,
-  "losses": 31,
-  "kd_ratio": 1.47,
-  "matches_played": 105
-}
-```
-
----
-
-## Lobby Management
-
-This section is intended for server operators.
-
-### AFK Detection
-
-- A player who remains in **spectator for 5 consecutive minutes** is automatically removed from the queue.
-- They receive a chat notification telling them they have been removed from the queue.
-- They can re-queue by typing `!queue` once they join a team or interact with the server.
-
-### Queue Expiry
-
-- A queue entry automatically expires after **15 minutes** if no match could be formed.
-- The player is notified via chat and must type `!queue` to rejoin the queue.
-- This mechanism prevents orphaned database entries during silent disconnections.
-
-### Automatic Broadcast Messages
-
-- Every **2 minutes**, the lobby server sends a broadcast message to all connected players showing the current number of players in queue.
-
-Example:
+Every **2 minutes**, the lobby server broadcasts the current queue count to all connected players:
 
 ```
 [MM] 6 player(s) in queue! Type !queue to join!
 ```
 
-### Best Practices for Operators
+### Stuck match recovery
 
-- Regularly monitor matchmaker logs (`matchmaker/logs/`) to detect container launch errors.
-- Use `!mm_status` in-game to check the overall system status without accessing the server.
-- If a match is stuck (match server unreachable), manually cancel the match via the Docker interface (`docker ps` / `docker stop <container>`) then clear the queue with `!mm_cancelqueue`.
-- Schedule lobby restarts during off-peak hours to avoid interrupting ongoing matches.
+If a match container becomes unreachable:
+
+```bash
+# Find the stuck container
+docker ps --filter "name=csgo-match-"
+
+# Stop it manually
+docker stop csgo-match-<ID>
+
+# Release the stuck DB entries (the matchmaker cleans up automatically within ~30s)
+# Or clear the queue manually if needed:
+# !mm_cancelqueue (in-game, as admin)
+```
+
+---
+
+*Last updated: 2026-03-08*

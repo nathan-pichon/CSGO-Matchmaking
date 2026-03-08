@@ -113,24 +113,28 @@ Automatically installs based on your distro:
 
 #### Interactive Configuration
 
-The wizard asks the following questions:
+The wizard walks through **9 steps**. Press Enter to accept any default shown in brackets.
 
-| Question | Default Value | Description |
-|----------|---------------|-------------|
-| Public IP address | Auto-detected | IP players use to connect |
-| Lobby port | `27015` | Lobby server UDP port |
-| MySQL password | Randomly generated | Password for the `csgo_mm` user |
-| RCON password | Randomly generated | For communication between the daemon and servers |
-| Lobby GSLT token | — | Token for the lobby server (required) |
-| Match GSLT tokens | — | One token per match slot (10 slots, guided entry) |
-| Discord webhook URL | Empty (disabled) | Optional for Discord notifications |
-| Map pool | `de_mirage,de_dust2,de_inferno,de_ancient,de_nuke,de_overpass,de_vertigo` | Active maps in rotation |
+| Step | What it asks | Default |
+|------|-------------|---------|
+| 1 | Public server IP | Auto-detected |
+| 2 | Database name, user, and password | Randomly generated password |
+| 3 | RCON password | Randomly generated |
+| 4 | GSLT tokens for match servers (one per slot, up to 10) | — |
+| 5 | GSLT token for the lobby server | — |
+| 6 | Lobby port and match server port range | `27015`, `27020–27029` |
+| 7 | Web panel port and your super-admin Steam ID | `5000`, — |
+| 8 | Map pool selection | All 7 default maps |
+| 9 | ELO spread, ready-check timeout, matchmaking tuning | See `config.env` defaults |
+
+> **Super-admin Steam ID**: enter your SteamID64 (17 digits, from [steamid.io](https://steamid.io)) or the legacy `STEAM_0:X:Y` format. The wizard converts automatically. This is the account that gains admin access when you first sign in through Steam.
 
 #### Downloads and Installation
 - Downloads CS:GO Legacy via SteamCMD (~25 GB)
 - Downloads and installs SourceMod + MetaMod:Source
 - Installs additional plugins: **Levels Ranks** and **ServerRedirect** (GAMMACASE)
-- Copies compiled plugins (`.smx`) from the repository to SourceMod folders
+- Copies compiled lobby plugins (`.smx`) from the repository to SourceMod folders
+- Compiles match-server plugins (`.sp` → `.smx`) using the installed `spcomp` binary
 - Configures `databases.cfg` files for MySQL connection
 
 #### Database
@@ -148,19 +152,24 @@ The wizard asks the following questions:
 - Verifies the image is accessible
 
 #### Systemd Services
-Creates and enables 3 services that start automatically on boot:
+Creates, enables, and **immediately starts** 3 services:
 
 ```
-csgo-lobby.service      # CS:GO lobby server (srcds)
+csgo-lobby.service      # CS:GO lobby server (srcds) — started only if CS:GO files are present
 csgo-matchmaker.service # Python matchmaking daemon
 csgo-webpanel.service   # Flask web interface
 ```
+
+All three services are configured with `Restart=always` — they restart automatically on crash and at boot.
+
+#### Firewall
+Opens the required ports automatically using the first available tool in priority order: `ufw` → `firewalld` → `iptables`. Rules are idempotent — safe to re-run.
 
 #### Final Validation
 Automatically tests:
 - MySQL connection
 - Docker API access
-- Port availability (27015, 5000)
+- Port availability
 - Service startup
 
 ### Re-running the Wizard (Update)
@@ -263,9 +272,9 @@ This starts a match with players currently in queue, even if fewer than 10. Usef
 
 ### 4. Check the Web Panel
 
-Open in a browser: `http://YOUR_IP:5000`
+Open in a browser: `http://YOUR_IP:5000` (or the port you chose during the wizard).
 
-The leaderboard should be displayed (empty at first). After a few matches, statistics will appear.
+The leaderboard and landing page should load. Click **Login** in the top-right corner to sign in with Steam. If your Steam account's SteamID matches `SUPER_ADMIN_STEAM_ID` in `config.env`, an **⚙ Admin** button will appear, granting access to the admin panel.
 
 ---
 
@@ -283,8 +292,14 @@ The leaderboard should be displayed (empty at first). After a few matches, stati
 ls -la /home/steam/csgo-dedicated/csgo/addons/sourcemod/plugins/
 # Should contain: csgo_mm_queue.smx, csgo_mm_notify.smx, etc.
 
-# If empty, trigger compilation via CI (push to GitHub)
-# or compile manually (see DEPLOY.md)
+# If empty, re-run the installer — it compiles and deploys all plugins:
+sudo ./install.sh --update
+
+# Or compile manually after SourceMod is installed:
+SPCOMP=/opt/csgo-server/csgo/addons/sourcemod/scripting/spcomp
+$SPCOMP lobby-server/sourcemod/scripting/csgo_mm_queue.sp \
+    -i lobby-server/sourcemod/scripting/include \
+    -o /opt/csgo-server/csgo/addons/sourcemod/plugins/csgo_mm_queue.smx
 ```
 
 ### Matchmaker Not Starting
@@ -331,10 +346,10 @@ docker logs csgo-match-<ID>
 # Check the service
 sudo systemctl status csgo-webpanel
 
-# Check the port
-ss -tlnp | grep 5000
+# Check the port (default 5000, or whatever WEB_PORT is set to in config.env)
+ss -tlnp | grep "$(grep WEB_PORT config.env | cut -d= -f2)"
 
-# Check the firewall
+# Check the firewall (replace 5000 with your WEB_PORT if different)
 sudo ufw allow 5000/tcp
 sudo ufw reload
 ```
@@ -371,6 +386,7 @@ sudo ./install.sh
 
 ## Next Steps
 
-- [Advanced Configuration](CONFIGURATION.md) — all `config.env` parameters
-- [In-Game Usage](USAGE.md) — player and admin commands
+- [Configuration](CONFIGURATION.md) — all `config.env` parameters
+- [Usage](USAGE.md) — player commands, matchmaking flow, web panel, Steam admin
 - [Maintenance](MAINTENANCE.md) — backups, updates, monitoring
+- [Deploy](DEPLOY.md) — Docker Compose alternative deployment mode

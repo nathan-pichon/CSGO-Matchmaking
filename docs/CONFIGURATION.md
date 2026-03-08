@@ -128,15 +128,18 @@ These variables control the behaviour of the Docker backend, responsible for lau
 
 These variables configure the HTTP server for the admin and statistics panel.
 
-| Variable     | Default Value | Description |
-|--------------|---------------|-------------|
-| `WEB_HOST`   | `0.0.0.0`     | Listen interface of the Flask web server. `0.0.0.0` exposes the panel on all interfaces. Specify `127.0.0.1` to restrict to local access (recommended if a reverse proxy is used). |
-| `WEB_PORT`   | `5000`        | TCP port on which the web panel is accessible. Default: `http://IP:5000`. |
-| `SECRET_KEY` | `CHANGE_ME`   | Flask secret key used to sign session cookies. **Must be a long, unique random string in production.** Generate one with: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| Variable               | Default Value | Description |
+|------------------------|---------------|-------------|
+| `WEB_HOST`             | `0.0.0.0`     | Listen interface of the Flask web server. `0.0.0.0` exposes the panel on all interfaces. Specify `127.0.0.1` to restrict to local access (recommended if a reverse proxy is used). |
+| `WEB_PORT`             | `5000`        | TCP port on which the web panel is accessible. Default: `http://IP:5000`. |
+| `SECRET_KEY`           | *(generated)* | Flask secret key used to sign session cookies. **Must be a long, unique random string in production.** Generated automatically by the installer with `openssl rand -hex 32`. |
+| `ADMIN_TOKEN`          | *(generated)* | Bearer token for programmatic API/curl admin access (`Authorization: Bearer TOKEN`). Generated automatically by the installer. |
+| `SUPER_ADMIN_STEAM_ID` | *(set by wizard)* | Legacy Steam ID (`STEAM_0:X:Y`) of the first super-admin account. Seeded into `mm_admins` automatically at web panel startup (idempotent). Find your Steam ID at [steamid.io](https://steamid.io). |
 
 **Notes:**
 - In production, place the web panel behind a reverse proxy (nginx, Caddy) with HTTPS.
 - Never leave `SECRET_KEY` at its default `CHANGE_ME` value in production.
+- Admin access is managed through the web panel at `/admin/admins` (Steam-authenticated). No shared passwords are used for admin commands.
 
 ---
 
