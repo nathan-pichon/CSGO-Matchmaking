@@ -41,7 +41,6 @@ public Plugin myinfo = {
 #define POLL_INTERVAL            2.0   // seconds between match-assignment polls
 #define EXPIRE_INTERVAL          30.0  // seconds between stale-queue sweeps
 #define AFK_INTERVAL             60.0  // seconds between AFK checks
-#define ANNOUNCE_INTERVAL        120.0 // seconds between broadcast queue announcements
 #define ELO_NOTIFY_DELAY         3.0   // seconds after connect before showing ELO recap
 #define HUD_INTERVAL             2.0   // seconds between queue-status HUD refreshes
 
@@ -99,7 +98,6 @@ public void OnPluginStart()
     CreateTimer(POLL_INTERVAL,     Timer_PollMatchAssignment, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(EXPIRE_INTERVAL,   Timer_ExpireStaleQueue,    _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(AFK_INTERVAL,      Timer_AntiAFK,             _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-    CreateTimer(ANNOUNCE_INTERVAL, Timer_AnnounceQueue,       _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(HUD_INTERVAL,      Timer_UpdateHUD,           _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
     LogMessage("[MM] Queue plugin loaded (v%s)", MM_VERSION);
@@ -1116,31 +1114,37 @@ public void DB_TopCallback(Database db, DBResultSet results, const char[] error,
         return;
     }
 
-    PrintToChat(client, "\x04 ─── Top 10 Players by ELO ───");
+    Panel panel = new Panel();
+    panel.SetTitle("Top 10 Players by ELO");
+    panel.DrawText("────────────────────────────────");
+
     int pos = 1;
     while (results.FetchRow())
     {
         char playerName[64];
         results.FetchString(0, playerName, sizeof(playerName));
-        int elo            = results.FetchInt(1);
-        int tier           = results.FetchInt(2);
-        int matchesPlayed  = results.FetchInt(3);
+        int elo           = results.FetchInt(1);
+        int tier          = results.FetchInt(2);
+        int matchesPlayed = results.FetchInt(3);
 
         char rankName[48];
         MM_GetRankName(tier, rankName, sizeof(rankName));
 
-        // Gold medal for top 3
-        char medal[4];
-        if      (pos == 1) strcopy(medal, sizeof(medal), "#1");
-        else if (pos == 2) strcopy(medal, sizeof(medal), "#2");
-        else if (pos == 3) strcopy(medal, sizeof(medal), "#3");
-        else Format(medal, sizeof(medal), "#%d", pos);
+        char line[128];
+        Format(line, sizeof(line), "#%d  %s  -  %d ELO  (%d games)", pos, playerName, elo, matchesPlayed);
+        panel.DrawText(line);
 
-        PrintToChat(client,
-            " \x09%s\x01 \x04%s\x01 — \x09%s\x01 (ELO: \x04%d\x01, %d games)",
-            medal, playerName, rankName, elo, matchesPlayed);
+        char rankLine[96];
+        Format(rankLine, sizeof(rankLine), "     %s", rankName);
+        panel.DrawText(rankLine);
+
         pos++;
     }
+
+    panel.DrawText("────────────────────────────────");
+    panel.DrawItem("Close");
+    panel.Send(client, Panel_DisplayHandler, 20);
+    delete panel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1211,12 +1215,35 @@ public void DB_StatsCallback(Database db, DBResultSet results, const char[] erro
     char playerName[64];
     GetClientName(client, playerName, sizeof(playerName));
 
-    PrintToChat(client, "\x04 ─── Stats: %s ───", playerName);
-    PrintToChat(client, " Rank: \x04%s\x01 | ELO: \x09%d", rankName, elo);
-    PrintToChat(client, " Matches: \x09%d\x01 | W/L/T: \x04%d\x01/\x07%d\x01/\x01%d", played, won, lost, tied);
-    PrintToChat(client, " Win Rate: \x04%.1f%%\x01 | K/D: \x04%.2f\x01 | HS%%: \x09%.1f%%", winRate, kd, hsPct);
-    PrintToChat(client, " Kills: \x04%d\x01 | Deaths: \x07%d\x01 | Assists: \x04%d", kills, deaths, assists);
-    PrintToChat(client, " Headshots: \x09%d\x01 | Win Streak: \x04%d\x01 | Best Streak: \x04%d", headshots, streak, bestStreak);
+    Panel panel = new Panel();
+
+    char title[80];
+    Format(title, sizeof(title), "Stats: %s", playerName);
+    panel.SetTitle(title);
+
+    panel.DrawText("────────────────────────────────");
+
+    char line[128];
+
+    Format(line, sizeof(line), "Rank: %s  |  ELO: %d", rankName, elo);
+    panel.DrawText(line);
+
+    Format(line, sizeof(line), "Matches: %d  |  W/L/T: %d/%d/%d", played, won, lost, tied);
+    panel.DrawText(line);
+
+    Format(line, sizeof(line), "Win Rate: %.1f%%  |  K/D: %.2f  |  HS: %.1f%%", winRate, kd, hsPct);
+    panel.DrawText(line);
+
+    Format(line, sizeof(line), "K/D/A:  %d / %d / %d", kills, deaths, assists);
+    panel.DrawText(line);
+
+    Format(line, sizeof(line), "Headshots: %d  |  Streak: %d  |  Best: %d", headshots, streak, bestStreak);
+    panel.DrawText(line);
+
+    panel.DrawText("────────────────────────────────");
+    panel.DrawItem("Close");
+    panel.Send(client, Panel_DisplayHandler, 15);
+    delete panel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1446,6 +1473,15 @@ public int ReadyCheck_Handler(Menu menu, MenuAction action, int client, int para
     return 0;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Generic display-only panel handler (no action taken on any selection)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public int Panel_DisplayHandler(Menu menu, MenuAction action, int client, int item)
+{
+    return 0;
+}
+
 // Countdown timer fires every 1 second; updates HUD hint with time remaining
 public Action Timer_ReadyCountdown(Handle timer, DataPack pack)
 {
@@ -1634,36 +1670,6 @@ public Action Timer_AntiAFK(Handle timer)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Timer: Announce queue count to all (every 120s)
-// ─────────────────────────────────────────────────────────────────────────────
-
-public Action Timer_AnnounceQueue(Handle timer)
-{
-    if (g_hDB == null)
-        return Plugin_Continue;
-
-    g_hDB.Query(DB_AnnounceQueueCount,
-        "SELECT COUNT(*) FROM mm_queue WHERE status='waiting'",
-        0, DBPrio_Low);
-
-    return Plugin_Continue;
-}
-
-public void DB_AnnounceQueueCount(Database db, DBResultSet results, const char[] error, any data)
-{
-    if (results == null || error[0] != '\0') return;
-    if (!results.FetchRow()) return;
-
-    int count = results.FetchInt(0);
-    if (count > 0)
-    {
-        MM_PrintToChatAll(
-            "\x09%d\x01 player(s) in queue! Type \x04!queue\x01 to join competitive matchmaking.",
-            count);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // !lastmatch — Show a summary of the player's most recent match
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1823,11 +1829,13 @@ public void DB_RecentResult(Database db, DBResultSet results, const char[] error
 
     if (!results.FetchRow())
     {
-        MM_PrintToChat(client, "[MM] No recent matches found.");
+        MM_PrintToChat(client, "No recent matches found. Play one first!");
         return;
     }
 
-    MM_PrintToChat(client, "[MM] Recent teammates & opponents:");
+    Panel panel = new Panel();
+    panel.SetTitle("Recent Teammates & Opponents");
+    panel.DrawText("────────────────────────────────");
 
     int count = 0;
     do
@@ -1843,18 +1851,21 @@ public void DB_RecentResult(Database db, DBResultSet results, const char[] error
         results.FetchString(5, winner, sizeof(winner));
 
         bool won = StrEqual(team, winner);
-        char role[12];
-        strcopy(role, sizeof(role), won ? "\x04Win" : "\x07Loss");
-
         char tierName[32];
         MM_GetRankName(rankTier, tierName, sizeof(tierName));
 
-        MM_PrintToChat(client,
-            "  \x04%s\x01 [%s] — \x04%dK\x01/\x07%dD\x01 (%s\x01)",
-            playerName, tierName, kills, deaths, role);
+        char line[128];
+        Format(line, sizeof(line), "%s  [%s]  %dK/%dD  %s",
+            playerName, tierName, kills, deaths, won ? "(Win)" : "(Loss)");
+        panel.DrawText(line);
 
         count++;
     } while (results.FetchRow() && count < 5);
+
+    panel.DrawText("────────────────────────────────");
+    panel.DrawItem("Close");
+    panel.Send(client, Panel_DisplayHandler, 15);
+    delete panel;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

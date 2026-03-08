@@ -35,9 +35,8 @@ public Plugin myinfo = {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-#define ANNOUNCE_QUEUE_INTERVAL   60.0   // seconds between queue-count broadcasts
+#define ANNOUNCE_QUEUE_INTERVAL   90.0   // seconds between queue-count HUD hint refreshes
 #define ANNOUNCE_HUD_INTERVAL     30.0   // seconds between HUD hints for spectators
-#define ANNOUNCE_TOP_INTERVAL     300.0  // seconds between top-3 broadcasts (5 min)
 
 // Welcome message delay after OnClientPostAdminCheck fires
 #define WELCOME_DELAY             3.0
@@ -63,7 +62,6 @@ public void OnPluginStart()
     // Repeating timers
     CreateTimer(ANNOUNCE_QUEUE_INTERVAL, Timer_AnnounceQueue, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(ANNOUNCE_HUD_INTERVAL,   Timer_HudHint,       _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-    CreateTimer(ANNOUNCE_TOP_INTERVAL,   Timer_AnnounceTop3,  _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
     LogMessage("[MM-Notify] Notification plugin loaded (v%s)", MM_VERSION);
 }
@@ -140,7 +138,10 @@ public Action Timer_WelcomeClient(Handle timer, any userid)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Timer: Queue-count announcement to all (every 60s)
+// Timer: Queue-count HUD hint refresh for all connected players (every 90s)
+//
+// Uses PrintHintText so the message appears as a small on-screen overlay and
+// never clutters the chat — critical on busy servers with many players.
 // ─────────────────────────────────────────────────────────────────────────────
 
 public Action Timer_AnnounceQueue(Handle timer)
@@ -169,12 +170,24 @@ public void DB_AnnounceQueueResult(Database db, DBResultSet results, const char[
     int count = results.FetchInt(0);
     g_iCachedQueueCount = count;
 
-    if (count > 0)
+    // Push a hint-text update to every connected player.
+    // PrintHintText appears as a small HUD overlay (bottom-centre of screen)
+    // and does not add a line to the chat box — safe on high-population servers.
+    for (int client = 1; client <= MaxClients; client++)
     {
-        // Colour-coded broadcast: [MM] in green, count in orange, instruction in light green
-        PrintToChatAll(
-            " \x02[MM]\x01 \x09%d\x01 player(s) in queue. Type \x04!queue\x01 to join competitive matchmaking!",
-            count);
+        if (!MM_IsValidClient(client))
+            continue;
+
+        // Note: queued players also receive this hint, but csgo_mm_queue.sp's
+        // Timer_UpdateHUD (every 2s) overwrites it almost immediately with their
+        // personal queue position — so there is no lasting conflict.
+        if (count > 0)
+            PrintHintText(client,
+                "[MM] %d player(s) in competitive queue.\nType !queue to join!",
+                count);
+        else
+            PrintHintText(client,
+                "[MM] Competitive matchmaking is open.\nType !queue to join!");
     }
 }
 
@@ -212,62 +225,5 @@ public Action Timer_HudHint(Handle timer)
     return Plugin_Continue;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Timer: Top-3 ELO scoreboard broadcast (every 5 minutes)
-// ─────────────────────────────────────────────────────────────────────────────
-
-public Action Timer_AnnounceTop3(Handle timer)
-{
-    if (g_hDB == null)
-        return Plugin_Continue;
-
-    g_hDB.Query(DB_Top3Result,
-        "SELECT name, elo, rank_tier FROM mm_players WHERE matches_played >= 1 ORDER BY elo DESC LIMIT 3",
-        0, DBPrio_Low);
-
-    return Plugin_Continue;
-}
-
-public void DB_Top3Result(Database db, DBResultSet results, const char[] error, any data)
-{
-    if (results == null || error[0] != '\0')
-    {
-        LogError("[MM-Notify] DB_Top3Result error: %s", error);
-        return;
-    }
-
-    if (results.RowCount == 0)
-        return;  // No ranked players yet — don't broadcast an empty list
-
-    PrintToChatAll(" \x02[MM]\x01 \x04─── Top Players by ELO ───");
-
-    // Medal strings for positions 1-3
-    static const char medals[3][] = { "#1", "#2", "#3" };
-
-    int pos = 0;
-    while (results.FetchRow() && pos < 3)
-    {
-        char playerName[64];
-        results.FetchString(0, playerName, sizeof(playerName));
-        int elo  = results.FetchInt(1);
-        int tier = results.FetchInt(2);
-
-        char rankName[48];
-        MM_GetRankName(tier, rankName, sizeof(rankName));
-
-        // Colour-code: gold/orange for #1, light green for #2-3
-        if (pos == 0)
-        {
-            PrintToChatAll(
-                " \x02[MM]\x01 \x09%s\x01 \x09%s\x01 — \x04%s\x01 (\x09%d\x01 ELO)",
-                medals[pos], playerName, rankName, elo);
-        }
-        else
-        {
-            PrintToChatAll(
-                " \x02[MM]\x01 \x04%s\x01 \x04%s\x01 — %s (\x04%d\x01 ELO)",
-                medals[pos], playerName, rankName, elo);
-        }
-        pos++;
-    }
-}
+// Top-3 broadcast removed — periodic chat blasts to 50+ players create noise.
+// Players can use !top in-game (panel) or visit the web panel leaderboard.
