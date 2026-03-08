@@ -34,29 +34,52 @@ def leaderboard() -> str:
         "SELECT id, name, is_active FROM mm_seasons ORDER BY start_date DESC"
     )
 
-    # Total count for pagination
-    count_row = query_one("SELECT COUNT(*) AS cnt FROM mm_leaderboard")
+    # Build season filter clause
+    season_clause = "AND p.season_id = :season_id" if season_id else ""
+    season_params: dict = {"season_id": season_id} if season_id else {}
+
+    # Total count for pagination (respects season filter)
+    count_row = query_one(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM mm_players p
+        WHERE p.matches_played >= 1 AND p.is_banned = 0
+          {season_clause}
+        """,
+        season_params,
+    )
     total = int(count_row["cnt"]) if count_row else 0
     total_pages = max(1, math.ceil(total / PER_PAGE))
     page = min(page, total_pages)
+    offset = (page - 1) * PER_PAGE
 
-    # Fetch one page of leaderboard rows
+    # Fetch one page of leaderboard rows (season-aware)
     rows = query_db(
-        """
+        f"""
         SELECT
-            `rank`,
-            steam_id,
-            name,
-            elo,
-            rank_tier,
-            matches_played,
-            win_rate_pct,
-            kd_ratio
-        FROM mm_leaderboard
-        ORDER BY `rank`
+            ROW_NUMBER() OVER (ORDER BY p.elo DESC) AS `rank`,
+            p.steam_id,
+            p.name,
+            p.elo,
+            p.rank_tier,
+            p.matches_played,
+            CASE
+                WHEN p.matches_played > 0
+                THEN ROUND(p.matches_won * 100.0 / p.matches_played, 1)
+                ELSE 0
+            END AS win_rate_pct,
+            CASE
+                WHEN p.total_deaths > 0
+                THEN ROUND(p.total_kills * 1.0 / p.total_deaths, 2)
+                ELSE p.total_kills
+            END AS kd_ratio
+        FROM mm_players p
+        WHERE p.matches_played >= 1 AND p.is_banned = 0
+          {season_clause}
+        ORDER BY p.elo DESC
         LIMIT :limit OFFSET :offset
         """,
-        {"limit": PER_PAGE, "offset": offset},
+        {"limit": PER_PAGE, "offset": offset, **season_params},
     )
 
     # Annotate each row with rank name and colour

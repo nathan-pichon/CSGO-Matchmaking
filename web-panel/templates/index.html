@@ -24,7 +24,7 @@
 ================================================================ -->
 <section class="section">
   <div class="container">
-    <div class="stat-grid stat-grid-3">
+    <div class="stat-grid stat-grid-4">
 
       <div class="stat-card">
         <div class="stat-card-icon">&#128100;</div>
@@ -39,11 +39,101 @@
       </div>
 
       <div class="stat-card stat-card-live">
+        <div class="stat-card-icon">&#128293;</div>
+        <div class="stat-card-value">{{ live_matches }}</div>
+        <div class="stat-card-label">Live Matches</div>
+      </div>
+
+      <div class="stat-card stat-card-live">
         <div class="stat-card-icon">
           <span class="queue-dot queue-dot-lg"></span>
         </div>
         <div class="stat-card-value">{{ queue_count }}</div>
         <div class="stat-card-label">Players in Queue</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     TOP PLAYERS + RECENT MATCHES
+================================================================ -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="home-two-col">
+
+      <!-- Top 5 players -->
+      <div class="home-col">
+        <h2 class="section-title">Top Players</h2>
+        {% if top_players %}
+        <table class="home-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>ELO</th>
+              <th>K/D</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in top_players %}
+            <tr>
+              <td class="rank-pos">{{ loop.index }}</td>
+              <td>
+                <a href="{{ url_for('players_bp.player_detail', steam_id=p.steam_id) }}"
+                   class="player-link">{{ p.name }}</a>
+                <span class="rank-badge" style="color:{{ p.rank_color }}">{{ p.rank_name }}</span>
+              </td>
+              <td><strong>{{ p.elo }}</strong></td>
+              <td>{{ p.kd_ratio }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <a href="{{ url_for('leaderboard_bp.leaderboard') }}" class="btn btn-outline btn-sm home-more">Full Leaderboard →</a>
+        {% else %}
+        <p class="text-secondary">No players yet.</p>
+        {% endif %}
+      </div>
+
+      <!-- Recent matches -->
+      <div class="home-col">
+        <h2 class="section-title">Recent Matches</h2>
+        {% if recent_matches %}
+        <table class="home-table">
+          <thead>
+            <tr>
+              <th>Map</th>
+              <th>Score</th>
+              <th>Winner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in recent_matches %}
+            <tr>
+              <td>
+                <a href="{{ url_for('matches_bp.match_detail', match_id=m.id) }}"
+                   class="player-link">{{ m.map_name }}</a>
+              </td>
+              <td>{{ m.team1_score }} – {{ m.team2_score }}</td>
+              <td>
+                {% if m.winner == 'team1' %}
+                  <span class="winner-badge team1">Team 1</span>
+                {% elif m.winner == 'team2' %}
+                  <span class="winner-badge team2">Team 2</span>
+                {% else %}
+                  <span class="winner-badge tie">Tie</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <a href="{{ url_for('matches_bp.match_list') }}" class="btn btn-outline btn-sm home-more">All Matches →</a>
+        {% else %}
+        <p class="text-secondary">No matches yet.</p>
+        {% endif %}
       </div>
 
     </div>
@@ -98,4 +188,37 @@
   </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* 4-column stat grid */
+  .stat-grid-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 768px) { .stat-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 480px) { .stat-grid-4 { grid-template-columns: 1fr; } }
+
+  /* Two-column layout */
+  .home-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+  @media (max-width: 768px) { .home-two-col { grid-template-columns: 1fr; } }
+
+  /* Simple home tables */
+  .home-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .home-table th { text-align: left; padding: 0.4rem 0.5rem; color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  .home-table td { padding: 0.5rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .home-table tr:last-child td { border-bottom: none; }
+
+  .rank-pos { color: var(--text-secondary); font-size: 0.85rem; width: 1.5rem; }
+  .rank-badge { font-size: 0.75rem; margin-left: 0.4rem; opacity: 0.8; }
+  .player-link { color: var(--text-primary); text-decoration: none; }
+  .player-link:hover { color: var(--accent); }
+
+  .winner-badge { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 3px; }
+  .winner-badge.team1 { background: rgba(52,152,219,0.15); color: #3498db; }
+  .winner-badge.team2 { background: rgba(241,196,15,0.15); color: #c9a800; }
+  .winner-badge.tie   { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
+
+  .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+  .home-more { margin-top: 1rem; }
+  .text-secondary { color: var(--text-secondary); }
+</style>
 {% endblock %}
