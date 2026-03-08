@@ -41,6 +41,8 @@ class NotificationBackend(ABC):
         team1_score: int,
         team2_score: int,
         top_player: dict,
+        player_stats: list[dict] | None = None,
+        elo_changes: dict[str, int] | None = None,
     ) -> None:
         """Notify that a match has ended with its final result.
 
@@ -52,6 +54,9 @@ class NotificationBackend(ABC):
             top_player: Stat dict for the player with the most kills (keys:
                 ``steam_id``, ``kills``, ``deaths``, ``assists``,
                 ``elo_change``).
+            player_stats: Optional list of all player stat dicts (each with
+                a ``team`` key) for full per-team scoreboards.
+            elo_changes: Optional mapping of steam_id → ELO delta.
         """
 
     @abstractmethod

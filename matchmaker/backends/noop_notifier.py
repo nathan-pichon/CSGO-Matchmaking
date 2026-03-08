@@ -35,6 +35,8 @@ class NoopNotifier(NotificationBackend):
         team1_score: int,
         team2_score: int,
         top_player: dict,
+        player_stats: list[dict] | None = None,
+        elo_changes: dict[str, int] | None = None,
     ) -> None:
         """No-op implementation."""
         logger.debug("NoopNotifier.notify_match_result: match_id=%d", match_id)

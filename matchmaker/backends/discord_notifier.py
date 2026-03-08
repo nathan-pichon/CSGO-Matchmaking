@@ -54,6 +54,13 @@ class DiscordNotifier(NotificationBackend):
 
     def __init__(self, config: object) -> None:
         self._webhook_url: str = getattr(config, "DISCORD_WEBHOOK_URL", "")
+        web_host = getattr(config, "WEB_HOST", "0.0.0.0")
+        web_port = getattr(config, "WEB_PORT", 5000)
+        # Build a base URL for player profiles; falls back to empty string.
+        if web_host and web_host != "0.0.0.0":
+            self._web_base: str = f"http://{web_host}:{web_port}"
+        else:
+            self._web_base = ""
 
     # ---------------------------------------------------------------------- #
     # Internal helpers
@@ -147,6 +154,32 @@ class DiscordNotifier(NotificationBackend):
         }
         self._post({"embeds": [embed]})
 
+    @staticmethod
+    def _build_scoreboard(players: list[dict], elo_changes: dict[str, int]) -> str:
+        """Build a compact scoreboard string for a team embed field.
+
+        Args:
+            players: List of stat dicts (``name``, ``kills``, ``deaths``,
+                ``assists``, ``steam_id``).
+            elo_changes: Mapping of steam_id → ELO delta.
+
+        Returns:
+            Formatted string suitable for a Discord embed field value
+            (max 1024 chars).
+        """
+        lines = ["```", "Name             K  D  A  ELO"]
+        for p in players:
+            name = (p.get("name") or p.get("steam_id", "?"))[:15].ljust(15)
+            k = p.get("kills", 0)
+            d = p.get("deaths", 0)
+            a = p.get("assists", 0)
+            delta = elo_changes.get(p.get("steam_id", ""), 0)
+            sign = "+" if delta >= 0 else ""
+            lines.append(f"{name} {k:>2} {d:>2} {a:>2}  {sign}{delta}")
+        lines.append("```")
+        result = "\n".join(lines)
+        return result[:1024]
+
     def notify_match_result(
         self,
         match_id: int,
@@ -154,8 +187,10 @@ class DiscordNotifier(NotificationBackend):
         team1_score: int,
         team2_score: int,
         top_player: dict,
+        player_stats: list[dict] | None = None,
+        elo_changes: dict[str, int] | None = None,
     ) -> None:
-        """Post a match-result embed with scores, ELO changes, and top fragger.
+        """Post a match-result embed with scores, ELO changes, and scoreboards.
 
         Args:
             match_id: Database ID of the match.
@@ -165,6 +200,9 @@ class DiscordNotifier(NotificationBackend):
             top_player: Stat dict for the top fragger with keys
                 ``steam_id``, ``kills``, ``deaths``, ``assists``,
                 ``elo_change``.
+            player_stats: Optional list of all player stat dicts (each with
+                ``team`` key ``'team1'`` or ``'team2'``) for full scoreboards.
+            elo_changes: Optional mapping of steam_id → ELO delta.
         """
         if not self._webhook_url:
             return
@@ -186,25 +224,35 @@ class DiscordNotifier(NotificationBackend):
         top_elo = top_player.get("elo_change", 0)
         elo_sign = "+" if top_elo >= 0 else ""
 
+        fields = [
+            {"name": "Winner", "value": winner_label, "inline": True},
+            {"name": "Score", "value": f"{team1_score} – {team2_score}", "inline": True},
+            {
+                "name": ":star: Top Fragger",
+                "value": f"`{top_sid}`\n{top_k}/{top_d}/{top_a}  ELO {elo_sign}{top_elo}",
+                "inline": False,
+            },
+        ]
+
+        if player_stats:
+            elo_map = elo_changes or {}
+            t1 = [p for p in player_stats if p.get("team") == "team1"]
+            t2 = [p for p in player_stats if p.get("team") == "team2"]
+            fields.append({
+                "name": ":blue_square: Team 1",
+                "value": self._build_scoreboard(t1, elo_map) or "—",
+                "inline": True,
+            })
+            fields.append({
+                "name": ":orange_square: Team 2",
+                "value": self._build_scoreboard(t2, elo_map) or "—",
+                "inline": True,
+            })
+
         embed = {
             "title": f":trophy:  Match #{match_id} Result",
             "color": color,
-            "fields": [
-                {"name": "Winner", "value": winner_label, "inline": True},
-                {
-                    "name": "Score",
-                    "value": f"{team1_score} – {team2_score}",
-                    "inline": True,
-                },
-                {
-                    "name": ":star: Top Fragger",
-                    "value": (
-                        f"`{top_sid}`\n"
-                        f"{top_k}/{top_d}/{top_a}  ELO {elo_sign}{top_elo}"
-                    ),
-                    "inline": False,
-                },
-            ],
+            "fields": fields,
             "footer": {"text": "CS:GO Matchmaking"},
         }
         self._post({"embeds": [embed]})
@@ -227,12 +275,30 @@ class DiscordNotifier(NotificationBackend):
         if not self._webhook_url:
             return
 
+        # Rank tier emoji progression (Silver → Gold → MG → DMG → LE → LEM → Supreme → Global)
+        _RANK_EMOJI = [
+            "⬜", "⬜", "⬜", "⬜", "⬜",   # Silver I–V
+            "🟡", "🟡", "🟡", "🟡", "🟡",  # Gold Nova I–Master
+            "🔵", "🔵", "🔵",               # MG1, MG2, MGE
+            "🔴",                            # DMG
+            "🟣", "🟣",                     # LE, LEM
+            "🔶",                            # Supreme
+            "⭐",                            # Global Elite
+        ]
+        new_emoji = _RANK_EMOJI[new_tier] if new_tier < len(_RANK_EMOJI) else "🏆"
+
+        profile_link = (
+            f"\n[View Profile]({self._web_base}/player/{steam_id})"
+            if self._web_base else ""
+        )
+
         embed = {
-            "title": ":arrow_up:  Rank Up!",
+            "title": f":arrow_up:  Rank Up!  {new_emoji}",
             "color": _COLOR_GOLD,
             "description": (
                 f"**{name}** (`{steam_id}`) has ranked up!\n"
                 f"{_tier_name(old_tier)}  →  **{_tier_name(new_tier)}**"
+                f"{profile_link}"
             ),
             "footer": {"text": "CS:GO Matchmaking"},
         }
