@@ -50,3 +50,7 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Internal memory / scratch files
+memory/
+describe.md
