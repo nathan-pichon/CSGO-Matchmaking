@@ -119,6 +119,26 @@ def player_profile(steam_id: str) -> str:
     # Calculate SVG polyline points
     svg_points: str = _build_svg_points(elo_values, width=600, height=120)
 
+    # Admin overlay data — always queried (cheap) so the template can display
+    # them without a separate AJAX call when the admin overlay is shown.
+    report_row = query_one(
+        """
+        SELECT COUNT(DISTINCT reporter_id) AS cnt
+        FROM mm_reports
+        WHERE reported_id = :sid
+          AND reviewed = 0
+          AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        """,
+        {"sid": steam_id},
+    )
+    player["report_count"] = int((report_row or {}).get("cnt", 0))
+
+    queue_row = query_one(
+        "SELECT status FROM mm_queue WHERE steam_id = :sid AND status IN ('waiting','ready_check','matched') LIMIT 1",
+        {"sid": steam_id},
+    )
+    player["queue_status"] = (queue_row or {}).get("status")
+
     return render_template(
         "player.html",
         player=player,

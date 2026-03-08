@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Server Management — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Servers</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Resource stats ─────────────────────────────────────────────── -->
+<div class="admin-stats-row">
+  <div class="admin-stat-card">
+    <span class="stat-value {% if match_servers|length > 0 %}stat-live{% endif %}">{{ match_servers|length }}</span>
+    <span class="stat-label">Active servers</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ port_stats.total|default(0)|int - port_stats.used|default(0)|int }}</span>
+    <span class="stat-label">Free ports</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ gslt_stats.total|default(0)|int - gslt_stats.used|default(0)|int }}</span>
+    <span class="stat-label">Free GSLT tokens</span>
+  </div>
+</div>
+
+<!-- ── Lobby broadcast ────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Lobby Server — {{ lobby.ip }}:{{ lobby.port }}</h2>
+  <form method="post" action="{{ url_for('admin_bp.lobby_say') }}" class="admin-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Broadcast to all lobby players</label>
+        <input type="text" name="message" class="form-input"
+               placeholder="Server maintenance in 5 minutes…" maxlength="200" required />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-accent">Broadcast</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Match servers ──────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Active Match Servers ({{ match_servers|length }})</h2>
+  {% if match_servers %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Map</th>
+        <th>Status</th>
+        <th>IP:Port</th>
+        <th>Score</th>
+        <th>Container</th>
+        <th>Started</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in match_servers %}
+      <tr>
+        <td>
+          <a href="{{ url_for('matches_bp.match_detail', match_id=m.id) }}"
+             class="player-link">#{{ m.id }}</a>
+        </td>
+        <td>{{ m.map_name or '—' }}</td>
+        <td><span class="badge badge-{{ m.status }}">{{ m.status }}</span></td>
+        <td><code>{{ m.server_ip }}:{{ m.server_port }}</code></td>
+        <td>{{ m.team1_score }}–{{ m.team2_score }}</td>
+        <td><code class="small-code">{{ (m.docker_container_id or '—')[:12] }}</code></td>
+        <td>{{ m.started_at.strftime('%H:%M:%S') if m.started_at else '—' }}</td>
+        <td class="actions-cell">
+          <!-- Say -->
+          <button class="btn btn-ghost btn-sm"
+                  onclick="openSayModal({{ m.id }})">Say</button>
+          <!-- Cancel -->
+          {% if current_role in ('admin','superadmin') %}
+          <form method="post"
+                action="{{ url_for('admin_bp.server_cancel', match_id=m.id) }}"
+                class="inline-form"
+                onsubmit="return confirm('Cancel match #{{ m.id }}?')">
+            <input type="hidden" name="reason" value="Cancelled by admin" />
+            <button type="submit" class="btn btn-sm btn-danger-ghost">Cancel</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No active match servers.</p>
+  {% endif %}
+</div>
+
+<!-- ── Say modal ──────────────────────────────────────────────────── -->
+<div id="sayModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 class="modal-title">Send message to match</h3>
+    <form id="sayForm" method="post" action="">
+      <input type="text" name="message" id="sayMessage" class="form-input"
+             placeholder="Type message…" maxlength="200" required />
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-accent">Send</button>
+        <button type="button" class="btn btn-ghost" onclick="closeSayModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .admin-stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:1.2rem 1rem; text-align:center; }
+  .stat-value      { display:block; font-size:2rem; font-weight:700; color:var(--text-primary); }
+  .stat-live       { color:var(--success); }
+  .stat-label      { display:block; font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.25rem; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .badge           { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .badge-live      { background:rgba(76,175,80,.2); color:var(--success); }
+  .badge-warmup    { background:rgba(255,193,7,.2); color:#ffc107; }
+  .badge-creating  { background:rgba(100,149,237,.2); color:#6495ed; }
+  .badge-overtime  { background:rgba(255,100,0,.2); color:#ff6400; }
+  .form-row        { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group      { flex:1; min-width:200px; }
+  .form-group-btn  { flex:0 0 auto; }
+  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+  .form-input:focus{ outline:none; border-color:var(--accent); }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; text-decoration:none; display:inline-block; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm          { padding:0.3rem 0.7rem; font-size:0.78rem; }
+  .btn-accent      { background:var(--accent); color:#000; }
+  .btn-accent:hover{ background:#d49b00; }
+  .btn-danger-ghost { border:1px solid var(--danger); background:transparent; color:var(--danger); }
+  .btn-danger-ghost:hover { background:rgba(211,47,47,.1); }
+  .inline-form     { display:inline; }
+  .actions-cell    { white-space:nowrap; }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .small-code      { font-size:0.75rem; }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+  /* Modal */
+  .modal-overlay   { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:999; display:flex; align-items:center; justify-content:center; }
+  .modal-box       { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:2rem; min-width:320px; max-width:480px; width:90%; }
+  .modal-title     { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin:0 0 1rem; }
+  .modal-actions   { display:flex; gap:0.75rem; margin-top:1rem; }
+</style>
+<script>
+  function openSayModal(matchId) {
+    const modal = document.getElementById('sayModal');
+    const form = document.getElementById('sayForm');
+    form.action = '/admin/servers/' + matchId + '/say';
+    document.getElementById('sayMessage').value = '';
+    modal.style.display = 'flex';
+    document.getElementById('sayMessage').focus();
+  }
+  function closeSayModal() {
+    document.getElementById('sayModal').style.display = 'none';
+  }
+  document.getElementById('sayModal').addEventListener('click', function(e) {
+    if (e.target === this) closeSayModal();
+  });
+</script>
+{% endblock %}

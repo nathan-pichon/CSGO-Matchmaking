@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Map Pool — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Map Pool</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Add map form ───────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Add Map</h2>
+  <form method="post" action="{{ url_for('admin_bp.map_add') }}" class="admin-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Internal name (e.g. de_mirage)</label>
+        <input type="text" name="map_name" class="form-input"
+               placeholder="de_newmap" pattern="[a-z0-9_]+" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Display name</label>
+        <input type="text" name="display_name" class="form-input"
+               placeholder="New Map" required />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-accent">Add</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Map pool table ────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">
+    Map Pool ({{ maps|selectattr('is_active')|list|length }} active / {{ maps|length }} total)
+  </h2>
+  {% if maps %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Map</th>
+        <th>Display name</th>
+        <th>Status</th>
+        <th>Weight</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in maps %}
+      <tr class="{% if not m.is_active %}row-inactive{% endif %}">
+        <td><code>{{ m.map_name }}</code></td>
+        <td>{{ m.display_name }}</td>
+        <td>
+          {% if m.is_active %}
+            <span class="badge badge-ok">Active</span>
+          {% else %}
+            <span class="badge badge-inactive">Inactive</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_bp.map_weight', map_id=m.id) }}"
+                class="inline-form weight-form">
+            <input type="number" name="weight" value="{{ m.weight }}"
+                   min="1" max="10" class="weight-input" />
+            <button type="submit" class="btn btn-sm btn-ghost">Save</button>
+          </form>
+        </td>
+        <td class="actions-cell">
+          <!-- Toggle active -->
+          <form method="post"
+                action="{{ url_for('admin_bp.map_toggle', map_id=m.id) }}"
+                class="inline-form">
+            <button type="submit"
+                    class="btn btn-sm {% if m.is_active %}btn-warning-ghost{% else %}btn-success-ghost{% endif %}">
+              {{ 'Disable' if m.is_active else 'Enable' }}
+            </button>
+          </form>
+          <!-- Delete (superadmin) -->
+          {% if current_role == 'superadmin' %}
+          <form method="post"
+                action="{{ url_for('admin_bp.map_delete', map_id=m.id) }}"
+                class="inline-form"
+                onsubmit="return confirm('Delete {{ m.map_name }} from pool?')">
+            <button type="submit" class="btn btn-sm btn-danger-ghost">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No maps in pool.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .form-row        { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group      { flex:1; min-width:160px; }
+  .form-group-btn  { flex:0 0 auto; }
+  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+  .form-input:focus{ outline:none; border-color:var(--accent); }
+  .badge           { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .badge-ok        { background:rgba(76,175,80,.2); color:var(--success); }
+  .badge-inactive  { background:rgba(150,150,150,.15); color:#888; }
+  .row-inactive    { opacity:0.6; }
+  .inline-form     { display:inline; }
+  .weight-form     { display:inline-flex; align-items:center; gap:0.4rem; }
+  .weight-input    { width:54px; padding:0.3rem 0.4rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.85rem; text-align:center; }
+  .actions-cell    { white-space:nowrap; }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm          { padding:0.3rem 0.7rem; font-size:0.78rem; }
+  .btn-accent      { background:var(--accent); color:#000; }
+  .btn-accent:hover{ background:#d49b00; }
+  .btn-success-ghost { border:1px solid var(--success); background:transparent; color:var(--success); }
+  .btn-success-ghost:hover { background:rgba(76,175,80,.1); }
+  .btn-warning-ghost { border:1px solid #ffc107; background:transparent; color:#ffc107; }
+  .btn-warning-ghost:hover { background:rgba(255,193,7,.1); }
+  .btn-danger-ghost { border:1px solid var(--danger); background:transparent; color:var(--danger); }
+  .btn-danger-ghost:hover { background:rgba(211,47,47,.1); }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+</style>
+{% endblock %}

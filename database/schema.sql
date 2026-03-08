@@ -551,3 +551,33 @@ ALTER TABLE mm_queue
   ADD COLUMN IF NOT EXISTS lobby_server_id VARCHAR(32) NULL
     COMMENT 'Lobby server instance this player queued from (e.g. lobby-1)'
     AFTER map_preference;
+
+-- ============================================================
+-- MIGRATIONS — Admin panel enhancements
+-- ============================================================
+
+-- Soft-delete support: record who lifted a ban and when,
+-- preserving the audit history rather than hard-deleting rows.
+ALTER TABLE mm_bans
+  ADD COLUMN IF NOT EXISTS unbanned_by VARCHAR(32) NULL
+    COMMENT 'Steam ID of the admin who lifted this ban'
+    AFTER banned_by,
+  ADD COLUMN IF NOT EXISTS unbanned_at DATETIME NULL
+    COMMENT 'Timestamp when the ban was lifted'
+    AFTER unbanned_by;
+
+-- Admin action audit trail: every write action in the web panel
+-- is logged here for accountability and forensics.
+CREATE TABLE IF NOT EXISTS mm_admin_log (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  admin_id    VARCHAR(32)   NOT NULL COMMENT 'mm_admins.steam_id or "api-token"',
+  action      VARCHAR(64)   NOT NULL COMMENT 'Machine-readable action (e.g. ban, unban, set_elo)',
+  target_type ENUM('player','match','queue','map','admin','season','ban','server') NULL,
+  target_id   VARCHAR(64)   NULL COMMENT 'steam_id, match_id, map_name, etc.',
+  detail      VARCHAR(255)  NULL COMMENT 'Human-readable summary of the change',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_admin_time (admin_id, created_at),
+  INDEX idx_target     (target_type, target_id),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB COMMENT='Audit trail for all admin panel write actions';

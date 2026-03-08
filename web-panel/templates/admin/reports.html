@@ -31,8 +31,11 @@
     <tbody>
       {% for r in flagged %}
       <tr>
-        <td>{{ r.display_name }}</td>
-        <td><code>{{ r.reported_id }}</code></td>
+        <td>
+          <a href="{{ url_for('players_bp.player_detail', steam_id=r.reported_id) }}"
+             class="player-link">{{ r.display_name }}</a>
+        </td>
+        <td><code class="small-code">{{ r.reported_id }}</code></td>
         <td>
           <span class="reporter-count {% if r.unique_reporters >= 5 %}count-high{% elif r.unique_reporters >= 3 %}count-med{% endif %}">
             {{ r.unique_reporters }}
@@ -40,8 +43,11 @@
         </td>
         <td>{{ r.total_reports }}</td>
         <td>{{ r.last_report.strftime('%Y-%m-%d %H:%M') if r.last_report else '—' }}</td>
-        <td>
+        <td class="actions-cell">
+          <a href="{{ url_for('admin_bp.report_detail', reported_id=r.reported_id) }}"
+             class="btn btn-ghost btn-sm">Details</a>
           <form method="post" action="{{ url_for('admin_bp.report_dismiss', reported_id=r.reported_id) }}"
+                class="inline-form"
                 onsubmit="return confirm('Mark all reports for {{ r.display_name }} as reviewed?')">
             <button type="submit" class="btn btn-ghost btn-sm">Dismiss</button>
           </form>
@@ -70,5 +76,10 @@
   .count-med           { color:#ffa726; }
   .count-high          { color:var(--danger); }
   .empty-state         { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+  .player-link         { color:var(--accent); text-decoration:none; }
+  .player-link:hover   { text-decoration:underline; }
+  .small-code          { font-size:0.75rem; }
+  .actions-cell        { white-space:nowrap; }
+  .inline-form         { display:inline; }
 </style>
 {% endblock %}

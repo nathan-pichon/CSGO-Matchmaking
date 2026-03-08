@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Queue Monitor — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Queue</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Summary row ───────────────────────────────────────────────── -->
+{% set waiting   = queue_entries | selectattr('status', 'eq', 'waiting')     | list %}
+{% set checking  = queue_entries | selectattr('status', 'eq', 'ready_check') | list %}
+{% set matched   = queue_entries | selectattr('status', 'eq', 'matched')     | list %}
+<div class="admin-stats-row">
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ waiting|length }}</span>
+    <span class="stat-label">Waiting</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value {% if checking|length > 0 %}stat-live{% endif %}">{{ checking|length }}</span>
+    <span class="stat-label">Ready check</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ matched|length }}</span>
+    <span class="stat-label">Matched</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ queue_entries|length }}</span>
+    <span class="stat-label">Total active</span>
+  </div>
+</div>
+
+<!-- ── Queue table ───────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Active Queue Entries</h2>
+  {% if queue_entries %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Player</th>
+        <th>Steam ID</th>
+        <th>ELO</th>
+        <th>Rank</th>
+        <th>Status</th>
+        <th>Map pref.</th>
+        <th>Lobby</th>
+        <th>Wait</th>
+        {% if current_role in ('admin','superadmin','moderator') %}<th>Action</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in queue_entries %}
+      <tr>
+        <td class="text-muted">{{ e.id }}</td>
+        <td>
+          <a href="{{ url_for('players_bp.player_detail', steam_id=e.steam_id) }}"
+             class="player-link">{{ e.player_name }}</a>
+        </td>
+        <td><code class="small-code">{{ e.steam_id }}</code></td>
+        <td>{{ e.elo }}</td>
+        <td>{{ e.rank_tier }}</td>
+        <td><span class="badge badge-{{ e.status }}">{{ e.status | replace('_', ' ') }}</span></td>
+        <td>{{ e.map_preference or '—' }}</td>
+        <td>{{ e.lobby_server_id or '—' }}</td>
+        <td>
+          {% set mins = (e.wait_secs // 60)|int %}
+          {% set secs = (e.wait_secs % 60)|int %}
+          {% if mins > 0 %}{{ mins }}m {% endif %}{{ secs }}s
+        </td>
+        {% if current_role in ('admin','superadmin','moderator') %}
+        <td>
+          <form method="post"
+                action="{{ url_for('admin_bp.queue_kick', entry_id=e.id) }}"
+                onsubmit="return confirm('Remove {{ e.player_name }} from queue?')">
+            <button type="submit" class="btn btn-ghost btn-sm btn-danger-ghost">Kick</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">Queue is empty.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .admin-stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:1.2rem 1rem; text-align:center; }
+  .stat-value      { display:block; font-size:2rem; font-weight:700; color:var(--text-primary); }
+  .stat-live       { color:var(--success); }
+  .stat-label      { display:block; font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.25rem; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .badge           { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .badge-waiting   { background:rgba(100,149,237,.2); color:#6495ed; }
+  .badge-ready_check { background:rgba(255,193,7,.2); color:#ffc107; }
+  .badge-matched   { background:rgba(76,175,80,.2); color:var(--success); }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .small-code      { font-size:0.75rem; }
+  .text-muted      { color:var(--text-secondary); }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm          { padding:0.3rem 0.7rem; font-size:0.78rem; }
+  .btn-danger-ghost { border-color:var(--danger); color:var(--danger); }
+  .btn-danger-ghost:hover { background:rgba(211,47,47,.1); }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+</style>
+<script>
+  // Auto-refresh queue every 15 seconds
+  setTimeout(() => location.reload(), 15000);
+</script>
+{% endblock %}

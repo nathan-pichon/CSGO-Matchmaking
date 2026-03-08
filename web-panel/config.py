@@ -52,3 +52,8 @@ class Config:
     # Steam ID of the initial super-admin, seeded into mm_admins on first startup.
     # Format: STEAM_0:1:XXXXXXXX — empty string disables seeding.
     SUPER_ADMIN_STEAM_ID: str = os.getenv("SUPER_ADMIN_STEAM_ID", "")
+
+    # RCON — used by the admin panel to send commands to game servers
+    RCON_PASSWORD: str = os.getenv("RCON_PASSWORD", "")
+    LOBBY_IP: str = os.getenv("LOBBY_IP", "127.0.0.1")
+    LOBBY_PORT: int = int(os.getenv("LOBBY_PORT", "27015"))

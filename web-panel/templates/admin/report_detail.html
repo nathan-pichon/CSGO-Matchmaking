@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Report Detail — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Reports</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.reports') }}" class="btn btn-ghost btn-sm">← All reports</a>
+</div>
+
+<!-- ── Player overview ────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Reported player</h2>
+  <div class="player-overview">
+    <div class="player-info">
+      <a href="{{ url_for('players_bp.player_detail', steam_id=reported_id) }}"
+         class="player-name-link">
+        {{ player.name if player else reported_id }}
+      </a>
+      <code class="steam-id">{{ reported_id }}</code>
+    </div>
+    <div class="player-stats-inline">
+      {% if player %}
+      <span class="stat-pill">ELO <strong>{{ player.elo }}</strong></span>
+      <span class="stat-pill">Matches <strong>{{ player.matches_played }}</strong></span>
+      <span class="stat-pill {% if player.is_banned %}stat-banned{% endif %}">
+        {{ 'Banned' if player.is_banned else 'Not banned' }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="player-actions">
+      {% if player and not player.is_banned %}
+      <button class="btn btn-danger"
+              onclick="document.getElementById('quickBanModal').style.display='flex'">
+        Quick ban
+      </button>
+      {% endif %}
+      <form method="post"
+            action="{{ url_for('admin_bp.report_dismiss', reported_id=reported_id) }}"
+            onsubmit="return confirm('Mark all reports for this player as reviewed?')">
+        <button type="submit" class="btn btn-ghost">Dismiss all reports</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Individual reports ─────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">
+    Individual reports ({{ individual_reports|length }})
+  </h2>
+  {% if individual_reports %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Reporter</th>
+        <th>Match</th>
+        <th>Map</th>
+        <th>Reason</th>
+        <th>Details</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in individual_reports %}
+      <tr>
+        <td class="text-muted">{{ r.id }}</td>
+        <td>
+          <a href="{{ url_for('players_bp.player_detail', steam_id=r.reporter_id) }}"
+             class="player-link">{{ r.reporter_name }}</a>
+        </td>
+        <td>
+          {% if r.match_id %}
+          <a href="{{ url_for('matches_bp.match_detail', match_id=r.match_id) }}"
+             class="player-link">#{{ r.match_id }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ r.map_name or '—' }}</td>
+        <td><span class="reason-badge reason-{{ r.reason }}">{{ r.reason }}</span></td>
+        <td class="detail-text">{{ r.details or '—' }}</td>
+        <td class="text-muted nowrap">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No pending reports.</p>
+  {% endif %}
+</div>
+
+<!-- ── Quick ban modal ────────────────────────────────────────────── -->
+<div id="quickBanModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 class="modal-title">Ban reported player</h3>
+    <form method="post" action="{{ url_for('admin_bp.ban_player') }}">
+      <input type="hidden" name="steam_id" value="{{ reported_id }}" />
+      <div class="form-group mb">
+        <label class="form-label">Duration presets</label>
+        <div class="preset-row">
+          <button type="button" class="preset-btn" onclick="setDur(1440)">1 day</button>
+          <button type="button" class="preset-btn" onclick="setDur(10080)">7 days</button>
+          <button type="button" class="preset-btn" onclick="setDur(43200)">30 days</button>
+          <button type="button" class="preset-btn" onclick="setDur(0)">Permanent</button>
+        </div>
+      </div>
+      <div class="form-group mb">
+        <label class="form-label">Duration (minutes, 0 = permanent)</label>
+        <input type="number" name="duration_minutes" id="banDuration" class="form-input" min="0" value="1440" />
+      </div>
+      <div class="form-group mb">
+        <label class="form-label">Reason</label>
+        <input type="text" name="reason" class="form-input"
+               value="Multiple player reports" required />
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-danger">Ban</button>
+        <button type="button" class="btn btn-ghost"
+                onclick="document.getElementById('quickBanModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .player-overview { display:flex; flex-wrap:wrap; align-items:center; gap:1.5rem; }
+  .player-info     { display:flex; flex-direction:column; gap:0.25rem; }
+  .player-name-link { font-size:1.1rem; font-weight:700; color:var(--accent); text-decoration:none; }
+  .player-name-link:hover { text-decoration:underline; }
+  .steam-id        { font-size:0.78rem; color:var(--text-secondary); }
+  .player-stats-inline { display:flex; gap:0.5rem; flex-wrap:wrap; }
+  .stat-pill       { padding:0.2rem 0.6rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:20px; font-size:0.8rem; color:var(--text-secondary); }
+  .stat-banned     { border-color:var(--danger); color:var(--danger); }
+  .player-actions  { display:flex; gap:0.75rem; flex-wrap:wrap; margin-left:auto; }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .text-muted      { color:var(--text-secondary); }
+  .nowrap          { white-space:nowrap; }
+  .reason-badge    { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .reason-cheating { background:rgba(211,47,47,.3); color:#ef5350; }
+  .reason-griefing { background:rgba(255,152,0,.2); color:#ffa726; }
+  .reason-toxic    { background:rgba(255,193,7,.2); color:#ffc107; }
+  .reason-afk      { background:rgba(150,150,150,.2); color:#aaa; }
+  .reason-other    { background:rgba(100,149,237,.2); color:#6495ed; }
+  .detail-text     { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem; color:var(--text-secondary); }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm          { padding:0.3rem 0.7rem; font-size:0.78rem; }
+  .btn-danger      { background:var(--danger); color:#fff; }
+  .btn-danger:hover{ background:#c62828; }
+  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+  .form-input:focus{ outline:none; border-color:var(--accent); }
+  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-group      { }
+  .mb              { margin-bottom:0.85rem; }
+  .preset-row      { display:flex; flex-wrap:wrap; gap:0.5rem; }
+  .preset-btn      { padding:0.25rem 0.6rem; font-size:0.78rem; border:1px solid var(--border); background:transparent; color:var(--text-secondary); border-radius:var(--border-radius); cursor:pointer; }
+  .preset-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .modal-overlay   { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:999; display:flex; align-items:center; justify-content:center; }
+  .modal-box       { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:2rem; min-width:320px; max-width:480px; width:90%; }
+  .modal-title     { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin:0 0 1rem; }
+  .modal-actions   { display:flex; gap:0.75rem; margin-top:1rem; }
+</style>
+<script>
+  function setDur(val) { document.getElementById('banDuration').value = val; }
+  document.getElementById('quickBanModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+</script>
+{% endblock %}

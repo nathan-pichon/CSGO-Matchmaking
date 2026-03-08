@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Player Management — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Players</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Search + tab filters ──────────────────────────────────────── -->
+<div class="filter-row">
+  <form method="get" class="search-form">
+    <input type="hidden" name="tab" value="{{ tab }}" />
+    <input type="text" name="q" value="{{ q }}" class="form-input search-input"
+           placeholder="Search by name or Steam ID…" />
+    <button type="submit" class="btn btn-accent">Search</button>
+  </form>
+  <div class="filter-bar">
+    {% for t, label in [('all','All'), ('banned','Banned'), ('abandon','Abandon history'), ('reported','Flagged')] %}
+    <a href="{{ url_for('admin_bp.admin_players', tab=t, q=q) }}"
+       class="filter-chip {% if tab == t %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ── Players table ─────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">Players — {{ tab | capitalize }}</h2>
+  {% if players %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Steam ID</th>
+        <th>ELO</th>
+        <th>Matches</th>
+        <th>Abandons</th>
+        <th>Reports</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in players %}
+      <tr>
+        <td>
+          <a href="{{ url_for('players_bp.player_detail', steam_id=p.steam_id) }}"
+             class="player-link">{{ p.name or p.steam_id }}</a>
+        </td>
+        <td><code class="small-code">{{ p.steam_id }}</code></td>
+        <td>{{ p.elo }}</td>
+        <td>{{ p.matches_played }}</td>
+        <td>
+          {% if p.abandon_count > 0 %}
+            <span class="badge badge-warn">{{ p.abandon_count }}</span>
+          {% else %}0{% endif %}
+        </td>
+        <td>
+          {% if p.report_count >= 3 %}
+            <a href="{{ url_for('admin_bp.report_detail', reported_id=p.steam_id) }}"
+               class="badge badge-danger">{{ p.report_count }}</a>
+          {% elif p.report_count > 0 %}
+            <span class="badge badge-warn">{{ p.report_count }}</span>
+          {% else %}0{% endif %}
+        </td>
+        <td>
+          {% if p.is_banned %}
+            <span class="badge badge-cancelled">Banned</span>
+            {% if p.ban_expires %}
+              <span class="expire-note">until {{ p.ban_expires.strftime('%m-%d %H:%M') }}</span>
+            {% else %}
+              <span class="expire-note">permanent</span>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-ok">OK</span>
+          {% endif %}
+        </td>
+        <td class="actions-cell">
+          <!-- Quick ban / unban -->
+          {% if current_role in ('moderator','admin','superadmin') %}
+            {% if p.is_banned %}
+            <form method="post" action="{{ url_for('admin_bp.unban_player') }}"
+                  class="inline-form"
+                  onsubmit="return confirm('Lift ban for {{ p.name or p.steam_id }}?')">
+              <input type="hidden" name="steam_id" value="{{ p.steam_id }}" />
+              <button type="submit" class="btn btn-sm btn-success-ghost">Unban</button>
+            </form>
+            {% else %}
+            <button class="btn btn-sm btn-danger-ghost"
+                    onclick="openBanModal('{{ p.steam_id }}', '{{ p.name | replace("'", "\\'") }}')">Ban</button>
+            {% endif %}
+            <!-- Kick from queue -->
+            <form method="post"
+                  action="{{ url_for('admin_bp.player_kick_queue', steam_id=p.steam_id) }}"
+                  class="inline-form">
+              <button type="submit" class="btn btn-sm btn-ghost">Kick queue</button>
+            </form>
+          {% endif %}
+          <!-- ELO override (admin+) -->
+          {% if current_role in ('admin','superadmin') %}
+          <button class="btn btn-sm btn-ghost"
+                  onclick="openEloModal('{{ p.steam_id }}', {{ p.elo }})">Set ELO</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('admin_bp.admin_players', tab=tab, q=q, page=page-1) }}" class="page-btn">← Prev</a>
+    {% endif %}
+    <span class="page-info">Page {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('admin_bp.admin_players', tab=tab, q=q, page=page+1) }}" class="page-btn">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="empty-state">No players found.</p>
+  {% endif %}
+</div>
+
+<!-- ── Ban modal ──────────────────────────────────────────────────── -->
+<div id="banModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 class="modal-title">Ban player — <span id="banTargetName"></span></h3>
+    <form method="post" action="{{ url_for('admin_bp.ban_player') }}">
+      <input type="hidden" name="steam_id" id="banSteamId" />
+      <div class="form-group mb">
+        <label class="form-label">Duration presets</label>
+        <div class="preset-row">
+          <button type="button" class="preset-btn" onclick="setDur(30)">30 min</button>
+          <button type="button" class="preset-btn" onclick="setDur(120)">2 h</button>
+          <button type="button" class="preset-btn" onclick="setDur(1440)">1 day</button>
+          <button type="button" class="preset-btn" onclick="setDur(10080)">7 days</button>
+          <button type="button" class="preset-btn" onclick="setDur(0)">Perm</button>
+        </div>
+      </div>
+      <div class="form-group mb">
+        <label class="form-label">Duration (minutes, 0 = permanent)</label>
+        <input type="number" name="duration_minutes" id="banDuration" class="form-input" min="0" value="0" />
+      </div>
+      <div class="form-group mb">
+        <label class="form-label">Reason</label>
+        <input type="text" name="reason" class="form-input" placeholder="Cheating, toxicity…" required />
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-danger">Ban</button>
+        <button type="button" class="btn btn-ghost" onclick="closeBanModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── ELO modal ──────────────────────────────────────────────────── -->
+<div id="eloModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 class="modal-title">Override ELO</h3>
+    <form method="post" action="{{ url_for('admin_bp.set_elo') }}">
+      <input type="hidden" name="redirect_to" value="players" />
+      <input type="hidden" name="steam_id" id="eloSteamId" />
+      <div class="form-group mb">
+        <label class="form-label">New ELO (0–9999)</label>
+        <input type="number" name="elo" id="eloValue" class="form-input" min="0" max="9999" required />
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-warning">Set ELO</button>
+        <button type="button" class="btn btn-ghost" onclick="closeEloModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
+  .filter-row      { display:flex; flex-wrap:wrap; gap:1rem; align-items:center; margin-bottom:1.25rem; }
+  .search-form     { display:flex; gap:0.5rem; align-items:center; flex:1; min-width:260px; }
+  .search-input    { flex:1; }
+  .filter-bar      { display:flex; flex-wrap:wrap; gap:0.5rem; }
+  .filter-chip     { padding:0.3rem 0.8rem; border:1px solid var(--border); border-radius:20px; font-size:0.8rem; color:var(--text-secondary); text-decoration:none; transition:all 0.15s; }
+  .filter-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .filter-chip.active { background:var(--accent); color:#000; border-color:var(--accent); font-weight:600; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .badge           { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+  .badge-ok        { background:rgba(76,175,80,.2); color:var(--success); }
+  .badge-warn      { background:rgba(255,193,7,.2); color:#ffc107; }
+  .badge-danger    { background:rgba(211,47,47,.2); color:#e57373; text-decoration:none; }
+  .badge-danger:hover { background:rgba(211,47,47,.3); }
+  .badge-cancelled { background:rgba(211,47,47,.2); color:#e57373; }
+  .expire-note     { font-size:0.72rem; color:var(--text-secondary); margin-left:0.3rem; }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .small-code      { font-size:0.75rem; }
+  .actions-cell    { white-space:nowrap; }
+  .inline-form     { display:inline; }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm          { padding:0.3rem 0.7rem; font-size:0.78rem; }
+  .btn-accent      { background:var(--accent); color:#000; }
+  .btn-accent:hover{ background:#d49b00; }
+  .btn-danger      { background:var(--danger); color:#fff; }
+  .btn-danger:hover{ background:#c62828; }
+  .btn-danger-ghost { border:1px solid var(--danger); background:transparent; color:var(--danger); }
+  .btn-danger-ghost:hover { background:rgba(211,47,47,.1); }
+  .btn-success-ghost { border:1px solid var(--success); background:transparent; color:var(--success); }
+  .btn-success-ghost:hover { background:rgba(76,175,80,.1); }
+  .btn-warning     { background:#b8860b; color:#fff; }
+  .btn-warning:hover { background:#996000; }
+  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+  .form-input:focus{ outline:none; border-color:var(--accent); }
+  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-group      { }
+  .mb              { margin-bottom:0.85rem; }
+  .modal-overlay   { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:999; display:flex; align-items:center; justify-content:center; }
+  .modal-box       { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:2rem; min-width:320px; max-width:480px; width:90%; }
+  .modal-title     { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin:0 0 1rem; }
+  .modal-actions   { display:flex; gap:0.75rem; margin-top:1rem; }
+  .preset-row      { display:flex; flex-wrap:wrap; gap:0.5rem; }
+  .preset-btn      { padding:0.25rem 0.6rem; font-size:0.78rem; border:1px solid var(--border); background:transparent; color:var(--text-secondary); border-radius:var(--border-radius); cursor:pointer; }
+  .preset-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+  .pagination      { display:flex; align-items:center; gap:1rem; margin-top:1.25rem; justify-content:center; }
+  .page-btn        { padding:0.35rem 0.9rem; border:1px solid var(--border); border-radius:var(--border-radius); color:var(--accent); text-decoration:none; font-size:0.85rem; }
+  .page-btn:hover  { border-color:var(--accent); }
+  .page-info       { color:var(--text-secondary); font-size:0.85rem; }
+</style>
+<script>
+  function openBanModal(sid, name) {
+    document.getElementById('banSteamId').value = sid;
+    document.getElementById('banTargetName').textContent = name;
+    document.getElementById('banModal').style.display = 'flex';
+  }
+  function closeBanModal() { document.getElementById('banModal').style.display = 'none'; }
+  function setDur(val) { document.getElementById('banDuration').value = val; }
+
+  function openEloModal(sid, elo) {
+    document.getElementById('eloSteamId').value = sid;
+    document.getElementById('eloValue').value = elo;
+    document.getElementById('eloModal').style.display = 'flex';
+  }
+  function closeEloModal() { document.getElementById('eloModal').style.display = 'none'; }
+
+  [document.getElementById('banModal'), document.getElementById('eloModal')].forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+  });
+</script>
+{% endblock %}

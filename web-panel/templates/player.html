@@ -61,6 +61,188 @@
     </div>
 
     <!-- ================================================================
+         ADMIN OVERLAY (visible to logged-in admins only)
+    ================================================================ -->
+    {% if current_user and current_user.is_admin %}
+    <div class="card admin-overlay-panel">
+      <div class="admin-overlay-header">
+        <span class="admin-overlay-badge">⚙ Admin panel</span>
+        <a href="{{ url_for('admin_bp.activity_log') }}" class="admin-overlay-link">Activity log →</a>
+      </div>
+      <div class="admin-overlay-body">
+
+        <!-- Player status info -->
+        <div class="admin-info-row">
+          <div class="admin-info-item">
+            <span class="admin-info-label">Ban status</span>
+            {% if player.is_banned %}
+            <span class="admin-info-val danger">Banned</span>
+            {% else %}
+            <span class="admin-info-val ok">Not banned</span>
+            {% endif %}
+          </div>
+          <div class="admin-info-item">
+            <span class="admin-info-label">Abandon count</span>
+            <span class="admin-info-val {% if player.abandon_count | default(0) > 0 %}warn{% endif %}">
+              {{ player.abandon_count | default(0) }}
+            </span>
+          </div>
+          <div class="admin-info-item">
+            <span class="admin-info-label">Reports (30d)</span>
+            <span class="admin-info-val">
+              {% if player.report_count | default(0) >= 3 %}
+              <a href="{{ url_for('admin_bp.report_detail', reported_id=player.steam_id) }}"
+                 class="danger">{{ player.report_count | default(0) }} ↗</a>
+              {% else %}
+              {{ player.report_count | default(0) }}
+              {% endif %}
+            </span>
+          </div>
+          <div class="admin-info-item">
+            <span class="admin-info-label">Queue status</span>
+            <span class="admin-info-val">
+              {% if player.queue_status %}{{ player.queue_status }}{% else %}Not queued{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="admin-action-row">
+          <!-- Quick ban / unban -->
+          {% if player.is_banned %}
+          <form method="post" action="{{ url_for('admin_bp.unban_player') }}"
+                onsubmit="return confirm('Lift ban for {{ player.name | e }}?')">
+            <input type="hidden" name="steam_id" value="{{ player.steam_id }}" />
+            <button type="submit" class="btn btn-sm btn-success-ghost">Unban</button>
+          </form>
+          {% else %}
+          <button class="btn btn-sm btn-danger-ghost"
+                  onclick="document.getElementById('adminBanModal').style.display='flex'">
+            Ban player
+          </button>
+          {% endif %}
+
+          <!-- Kick from queue -->
+          <form method="post"
+                action="{{ url_for('admin_bp.player_kick_queue', steam_id=player.steam_id) }}">
+            <button type="submit" class="btn btn-sm btn-ghost">Kick from queue</button>
+          </form>
+
+          <!-- ELO override (admin+) -->
+          {% if current_user.admin_role in ('admin','superadmin') %}
+          <button class="btn btn-sm btn-ghost"
+                  onclick="document.getElementById('adminEloModal').style.display='flex'">
+            Set ELO
+          </button>
+          {% endif %}
+
+          <a href="{{ url_for('admin_bp.admin_players', q=player.steam_id) }}"
+             class="btn btn-sm btn-ghost">Full admin view →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Ban modal -->
+    <div id="adminBanModal" class="modal-overlay" style="display:none">
+      <div class="modal-box">
+        <h3 class="modal-title">Ban {{ player.name | e }}</h3>
+        <form method="post" action="{{ url_for('admin_bp.ban_player') }}">
+          <input type="hidden" name="steam_id" value="{{ player.steam_id }}" />
+          <div class="form-group mb">
+            <label class="form-label">Duration presets</label>
+            <div class="preset-row">
+              <button type="button" class="preset-btn" onclick="setAdminBanDur(1440)">1 day</button>
+              <button type="button" class="preset-btn" onclick="setAdminBanDur(10080)">7 days</button>
+              <button type="button" class="preset-btn" onclick="setAdminBanDur(43200)">30 days</button>
+              <button type="button" class="preset-btn" onclick="setAdminBanDur(0)">Permanent</button>
+            </div>
+          </div>
+          <div class="form-group mb">
+            <label class="form-label">Duration (minutes, 0 = permanent)</label>
+            <input type="number" name="duration_minutes" id="adminBanDuration"
+                   class="form-input" min="0" value="1440" />
+          </div>
+          <div class="form-group mb">
+            <label class="form-label">Reason</label>
+            <input type="text" name="reason" class="form-input"
+                   placeholder="Cheating, toxicity…" required />
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-danger">Ban</button>
+            <button type="button" class="btn btn-ghost"
+                    onclick="document.getElementById('adminBanModal').style.display='none'">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Admin ELO modal -->
+    <div id="adminEloModal" class="modal-overlay" style="display:none">
+      <div class="modal-box">
+        <h3 class="modal-title">Set ELO for {{ player.name | e }}</h3>
+        <form method="post" action="{{ url_for('admin_bp.set_elo') }}">
+          <input type="hidden" name="steam_id" value="{{ player.steam_id }}" />
+          <input type="hidden" name="redirect_to" value="players" />
+          <div class="form-group mb">
+            <label class="form-label">New ELO (0–9999)</label>
+            <input type="number" name="elo" class="form-input"
+                   min="0" max="9999" value="{{ player.elo }}" required />
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-warning">Set ELO</button>
+            <button type="button" class="btn btn-ghost"
+                    onclick="document.getElementById('adminEloModal').style.display='none'">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <style>
+      .admin-overlay-panel  { margin-bottom:1.5rem; border-color:rgba(255,160,0,.25); }
+      .admin-overlay-header { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1.25rem; border-bottom:1px solid rgba(255,160,0,.15); background:rgba(255,160,0,.04); }
+      .admin-overlay-badge  { font-size:0.78rem; font-weight:700; color:#ffb700; text-transform:uppercase; letter-spacing:0.06em; }
+      .admin-overlay-link   { font-size:0.78rem; color:var(--accent); text-decoration:none; }
+      .admin-overlay-link:hover { text-decoration:underline; }
+      .admin-overlay-body   { padding:1rem 1.25rem; display:flex; flex-direction:column; gap:0.85rem; }
+      .admin-info-row       { display:flex; flex-wrap:wrap; gap:1.5rem; }
+      .admin-info-item      { display:flex; flex-direction:column; gap:0.2rem; }
+      .admin-info-label     { font-size:0.72rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; }
+      .admin-info-val       { font-size:0.9rem; font-weight:600; color:var(--text-primary); }
+      .admin-info-val.ok    { color:var(--success); }
+      .admin-info-val.warn  { color:#ffc107; }
+      .admin-info-val.danger, a.danger { color:var(--danger); text-decoration:none; }
+      a.danger:hover        { text-decoration:underline; }
+      .admin-action-row     { display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; }
+      .modal-overlay        { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:999; display:flex; align-items:center; justify-content:center; }
+      .modal-box            { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:2rem; min-width:300px; max-width:440px; width:90%; }
+      .modal-title          { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin:0 0 1rem; }
+      .modal-actions        { display:flex; gap:0.75rem; margin-top:1rem; }
+      .form-group           { }
+      .mb                   { margin-bottom:0.85rem; }
+      .form-label           { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+      .form-input           { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+      .form-input:focus     { outline:none; border-color:var(--accent); }
+      .preset-row           { display:flex; flex-wrap:wrap; gap:0.5rem; }
+      .preset-btn           { padding:0.25rem 0.6rem; font-size:0.78rem; border:1px solid var(--border); background:transparent; color:var(--text-secondary); border-radius:var(--border-radius); cursor:pointer; }
+      .preset-btn:hover     { border-color:var(--accent); color:var(--accent); }
+      .btn-success-ghost    { border:1px solid var(--success); background:transparent; color:var(--success); }
+      .btn-success-ghost:hover { background:rgba(76,175,80,.1); }
+      .btn-danger-ghost     { border:1px solid var(--danger); background:transparent; color:var(--danger); }
+      .btn-danger-ghost:hover { background:rgba(211,47,47,.1); }
+      .btn-warning          { background:#b8860b; color:#fff; }
+      .btn-warning:hover    { background:#996000; }
+      .btn-danger           { background:var(--danger); color:#fff; }
+      .btn-danger:hover     { background:#c62828; }
+    </style>
+    <script>
+      function setAdminBanDur(v) { document.getElementById('adminBanDuration').value = v; }
+      [document.getElementById('adminBanModal'), document.getElementById('adminEloModal')].forEach(m => {
+        if (m) m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+      });
+    </script>
+    {% endif %}
+
+    <!-- ================================================================
          STAT GRID
     ================================================================ -->
     <div class="stat-grid stat-grid-6">

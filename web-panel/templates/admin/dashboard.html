@@ -17,10 +17,14 @@
       {{ live_matches|length }}
     </span>
     <span class="stat-label">Live matches</span>
+    <a href="{{ url_for('admin_bp.servers') }}" class="stat-link">Manage →</a>
   </div>
   <div class="admin-stat-card">
-    <span class="stat-value">{{ queue_count }}</span>
+    <span class="stat-value {% if queue_count > 0 %}stat-live{% endif %}">
+      {{ queue_count }}
+    </span>
     <span class="stat-label">Players in queue</span>
+    <a href="{{ url_for('admin_bp.queue_monitor') }}" class="stat-link">Monitor →</a>
   </div>
   <div class="admin-stat-card">
     <span class="stat-value {% if active_bans > 0 %}stat-warn{% endif %}">
@@ -29,12 +33,102 @@
     <span class="stat-label">Active bans</span>
     <a href="{{ url_for('admin_bp.bans') }}" class="stat-link">Manage →</a>
   </div>
+  <div class="admin-stat-card">
+    <span class="stat-value {% if pending_reports > 0 %}stat-danger{% endif %}">
+      {{ pending_reports }}
+    </span>
+    <span class="stat-label">Flagged players</span>
+    <a href="{{ url_for('admin_bp.reports') }}" class="stat-link">Review →</a>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ stats.total_players|default(0)|int }}</span>
+    <span class="stat-label">Total players</span>
+    <span class="stat-sub">+{{ stats.players_today|default(0)|int }} today</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value">{{ stats.total_matches|default(0)|int }}</span>
+    <span class="stat-label">Total matches</span>
+    <span class="stat-sub">+{{ stats.matches_today|default(0)|int }} today</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value {% if (stats.free_ports|default(0)|int) == 0 %}stat-warn{% endif %}">
+      {{ stats.free_ports|default(0)|int }}
+    </span>
+    <span class="stat-label">Free ports</span>
+  </div>
+  <div class="admin-stat-card">
+    <span class="stat-value {% if (stats.free_gslt|default(0)|int) == 0 %}stat-warn{% endif %}">
+      {{ stats.free_gslt|default(0)|int }}
+    </span>
+    <span class="stat-label">Free GSLT tokens</span>
+  </div>
 </div>
 
-<!-- ── Live matches ──────────────────────────────────────────────── -->
+<!-- ── Navigation grid ────────────────────────────────────────────── -->
+<div class="nav-grid">
+  <a href="{{ url_for('admin_bp.queue_monitor') }}" class="nav-tile">
+    <span class="nav-tile-icon">⟳</span>
+    <span class="nav-tile-label">Queue</span>
+    <span class="nav-tile-desc">Monitor &amp; kick queued players</span>
+  </a>
+  <a href="{{ url_for('admin_bp.servers') }}" class="nav-tile">
+    <span class="nav-tile-icon">⚙</span>
+    <span class="nav-tile-label">Servers</span>
+    <span class="nav-tile-desc">Manage match servers, broadcast</span>
+  </a>
+  <a href="{{ url_for('admin_bp.admin_matches') }}" class="nav-tile">
+    <span class="nav-tile-icon">🗂</span>
+    <span class="nav-tile-label">Matches</span>
+    <span class="nav-tile-desc">All matches, cancel &amp; cleanup</span>
+  </a>
+  <a href="{{ url_for('admin_bp.admin_players') }}" class="nav-tile">
+    <span class="nav-tile-icon">👤</span>
+    <span class="nav-tile-label">Players</span>
+    <span class="nav-tile-desc">Search, ban, ELO override</span>
+  </a>
+  <a href="{{ url_for('admin_bp.bans') }}" class="nav-tile">
+    <span class="nav-tile-icon">🚫</span>
+    <span class="nav-tile-label">Bans</span>
+    <span class="nav-tile-desc">Issue and manage bans</span>
+  </a>
+  <a href="{{ url_for('admin_bp.reports') }}" class="nav-tile">
+    <span class="nav-tile-icon">⚑</span>
+    <span class="nav-tile-label">Reports</span>
+    <span class="nav-tile-desc">Flagged players</span>
+  </a>
+  {% if current_role in ('admin','superadmin') %}
+  <a href="{{ url_for('admin_bp.map_pool') }}" class="nav-tile">
+    <span class="nav-tile-icon">🗺</span>
+    <span class="nav-tile-label">Map pool</span>
+    <span class="nav-tile-desc">Manage active maps &amp; weights</span>
+  </a>
+  <a href="{{ url_for('admin_bp.activity_log') }}" class="nav-tile">
+    <span class="nav-tile-icon">📋</span>
+    <span class="nav-tile-label">Activity log</span>
+    <span class="nav-tile-desc">Audit trail of admin actions</span>
+  </a>
+  {% endif %}
+  {% if current_role == 'superadmin' %}
+  <a href="{{ url_for('admin_bp.admin_list') }}" class="nav-tile">
+    <span class="nav-tile-icon">🔑</span>
+    <span class="nav-tile-label">Admin roster</span>
+    <span class="nav-tile-desc">Manage admin accounts &amp; roles</span>
+  </a>
+  <a href="{{ url_for('admin_bp.seasons') }}" class="nav-tile">
+    <span class="nav-tile-icon">🏆</span>
+    <span class="nav-tile-label">Seasons</span>
+    <span class="nav-tile-desc">Start seasons &amp; reset ELO</span>
+  </a>
+  {% endif %}
+</div>
+
+<!-- ── Live matches quick view ────────────────────────────────────── -->
+{% if live_matches %}
 <div class="card admin-section">
-  <h2 class="admin-section-title">Live &amp; Starting Matches</h2>
-  {% if live_matches %}
+  <div class="section-title-row">
+    <h2 class="admin-section-title">Live &amp; Starting Matches</h2>
+    <a href="{{ url_for('admin_bp.servers') }}" class="section-more">View all →</a>
+  </div>
   <table class="data-table">
     <thead>
       <tr>
@@ -50,78 +144,61 @@
     <tbody>
       {% for m in live_matches %}
       <tr>
-        <td>{{ m.id }}</td>
-        <td><code>{{ m.match_token }}</code></td>
+        <td>
+          <a href="{{ url_for('matches_bp.match_detail', match_id=m.id) }}"
+             class="player-link">#{{ m.id }}</a>
+        </td>
+        <td><code>{{ m.match_token[:12] }}…</code></td>
         <td>{{ m.map_name or '—' }}</td>
         <td><span class="badge badge-{{ m.status }}">{{ m.status }}</span></td>
-        <td>{{ m.port or '—' }}</td>
+        <td>{{ m.server_port or '—' }}</td>
         <td><code class="container-id">{{ (m.docker_container_id or '—')[:12] }}</code></td>
         <td>{{ m.started_at.strftime('%H:%M:%S') if m.started_at else '—' }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% else %}
-  <p class="empty-state">No active matches at the moment.</p>
-  {% endif %}
 </div>
-
-<!-- ── ELO override ──────────────────────────────────────────────── -->
-<div class="card admin-section">
-  <h2 class="admin-section-title">Override ELO</h2>
-  <form method="post" action="{{ url_for('admin_bp.set_elo') }}" class="admin-form">
-    <div class="form-row">
-      <div class="form-group">
-        <label for="elo_steam_id" class="form-label">Steam ID</label>
-        <input type="text" id="elo_steam_id" name="steam_id" class="form-input"
-               placeholder="STEAM_0:1:12345678" required />
-      </div>
-      <div class="form-group form-group-sm">
-        <label for="elo_value" class="form-label">New ELO (0–9999)</label>
-        <input type="number" id="elo_value" name="elo" class="form-input"
-               min="0" max="9999" placeholder="1000" required />
-      </div>
-      <div class="form-group form-group-btn">
-        <label class="form-label">&nbsp;</label>
-        <button type="submit" class="btn btn-warning">Set ELO</button>
-      </div>
-    </div>
-  </form>
-</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <style>
   .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
-  .admin-stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; margin-bottom:1.5rem; }
-  .admin-stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:1.2rem 1rem; text-align:center; }
-  .stat-value      { display:block; font-size:2rem; font-weight:700; color:var(--text-primary); }
+  .admin-stats-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .admin-stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:1.1rem 1rem; text-align:center; }
+  .stat-value      { display:block; font-size:1.9rem; font-weight:700; color:var(--text-primary); }
   .stat-live       { color:var(--success); }
-  .stat-warn       { color:var(--danger); }
-  .stat-label      { display:block; font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.25rem; }
-  .stat-link       { display:block; font-size:0.8rem; color:var(--accent); margin-top:0.4rem; text-decoration:none; }
+  .stat-warn       { color:#ffc107; }
+  .stat-danger     { color:var(--danger); }
+  .stat-label      { display:block; font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.25rem; }
+  .stat-link       { display:block; font-size:0.78rem; color:var(--accent); margin-top:0.35rem; text-decoration:none; }
   .stat-link:hover { text-decoration:underline; }
+  .stat-sub        { display:block; font-size:0.72rem; color:var(--text-secondary); margin-top:0.2rem; }
+  /* Navigation grid */
+  .nav-grid        { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .nav-tile        { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--border-radius); padding:1.25rem 1rem; text-decoration:none; transition:border-color 0.15s, background 0.15s; display:flex; flex-direction:column; gap:0.25rem; }
+  .nav-tile:hover  { border-color:var(--accent); background:rgba(240,180,41,.05); }
+  .nav-tile-icon   { font-size:1.4rem; }
+  .nav-tile-label  { font-size:0.95rem; font-weight:700; color:var(--text-primary); }
+  .nav-tile-desc   { font-size:0.78rem; color:var(--text-secondary); }
+  /* Quick match list */
+  .section-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
   .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
-  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
-  .container-id    { font-size:0.8rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin:0; }
+  .section-more    { font-size:0.82rem; color:var(--accent); text-decoration:none; }
+  .section-more:hover { text-decoration:underline; }
   .badge           { display:inline-block; padding:0.2rem 0.5rem; border-radius:3px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
   .badge-live      { background:rgba(76,175,80,.2); color:var(--success); }
   .badge-warmup    { background:rgba(255,193,7,.2); color:#ffc107; }
   .badge-creating  { background:rgba(100,149,237,.2); color:#6495ed; }
-  .admin-form      { }
-  .form-row        { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
-  .form-group      { flex:1; min-width:180px; }
-  .form-group-sm   { flex:0 0 140px; }
-  .form-group-btn  { flex:0 0 auto; }
-  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
-  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; }
-  .form-input:focus{ outline:none; border-color:var(--accent); }
-  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .badge-overtime  { background:rgba(255,100,0,.2); color:#ff6400; }
+  .container-id    { font-size:0.78rem; }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; text-decoration:none; }
   .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
   .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
   .btn-sm          { padding:0.35rem 0.8rem; font-size:0.8rem; }
-  .btn-warning     { background:#b8860b; color:#fff; }
-  .btn-warning:hover{ background:#996000; }
-  .empty-state     { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
 </style>
 {% endblock %}

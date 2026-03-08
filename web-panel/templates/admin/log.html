@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log — CS:GO MM Admin{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="section-title">
+    <span class="logo-bracket">[</span>ADMIN<span class="logo-accent"> Activity Log</span><span class="logo-bracket">]</span>
+  </h1>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+</div>
+
+<!-- ── Filters ────────────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <form method="get" class="filter-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Filter by admin</label>
+        <select name="admin_id" class="form-input">
+          <option value="">All admins</option>
+          {% for a in all_admins %}
+          <option value="{{ a.admin_id }}" {% if admin_filter == a.admin_id %}selected{% endif %}>
+            {{ a.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Filter by action</label>
+        <input type="text" name="action" value="{{ action_filter }}" class="form-input"
+               placeholder="ban, unban, set_elo…" />
+      </div>
+      <div class="form-group form-group-btn">
+        <label class="form-label">&nbsp;</label>
+        <button type="submit" class="btn btn-accent">Filter</button>
+        <a href="{{ url_for('admin_bp.activity_log') }}" class="btn btn-ghost">Clear</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- ── Log table ──────────────────────────────────────────────────── -->
+<div class="card admin-section">
+  <h2 class="admin-section-title">
+    Log entries ({{ total }})
+    {% if admin_filter or action_filter %}— filtered{% endif %}
+  </h2>
+  {% if log_entries %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Admin</th>
+        <th>Action</th>
+        <th>Type</th>
+        <th>Target</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in log_entries %}
+      <tr>
+        <td class="text-muted nowrap">{{ e.created_at.strftime('%m-%d %H:%M:%S') }}</td>
+        <td>
+          {% if e.admin_id != 'api-token' %}
+          <a href="{{ url_for('players_bp.player_detail', steam_id=e.admin_id) }}"
+             class="player-link">{{ e.admin_name }}</a>
+          {% else %}
+          <span class="text-muted">api-token</span>
+          {% endif %}
+        </td>
+        <td><code class="action-code action-{{ e.action | replace('_','-') }}">{{ e.action }}</code></td>
+        <td>
+          {% if e.target_type %}
+          <span class="type-chip type-{{ e.target_type }}">{{ e.target_type }}</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if e.target_id %}
+            {% if e.target_type == 'player' or e.target_type == 'ban' %}
+            <a href="{{ url_for('players_bp.player_detail', steam_id=e.target_id) }}"
+               class="player-link small-code">{{ e.target_id }}</a>
+            {% elif e.target_type == 'match' %}
+            <a href="{{ url_for('matches_bp.match_detail', match_id=e.target_id) }}"
+               class="player-link">#{{ e.target_id }}</a>
+            {% else %}
+            <code class="small-code">{{ e.target_id }}</code>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="detail-cell">{{ e.detail or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('admin_bp.activity_log', admin_id=admin_filter, action=action_filter, page=page-1) }}"
+       class="page-btn">← Prev</a>
+    {% endif %}
+    <span class="page-info">Page {{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('admin_bp.activity_log', admin_id=admin_filter, action=action_filter, page=page+1) }}"
+       class="page-btn">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="empty-state">No log entries found.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .section-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .admin-section   { margin-bottom:1.5rem; padding:1.5rem; }
+  .admin-section-title { font-size:1rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-secondary); margin-bottom:1rem; }
+  .filter-form     { }
+  .form-row        { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .form-group      { flex:1; min-width:160px; }
+  .form-group-btn  { flex:0 0 auto; display:flex; gap:0.5rem; align-items:center; }
+  .form-label      { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .form-input      { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
+  .form-input:focus{ outline:none; border-color:var(--accent); }
+  .text-muted      { color:var(--text-secondary); }
+  .nowrap          { white-space:nowrap; font-size:0.82rem; }
+  .player-link     { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .small-code      { font-size:0.75rem; }
+  .action-code     { font-size:0.8rem; padding:0.1rem 0.4rem; border-radius:3px; background:rgba(255,255,255,.05); }
+  .type-chip       { display:inline-block; padding:0.1rem 0.45rem; border-radius:10px; font-size:0.72rem; font-weight:600; text-transform:uppercase; }
+  .type-player     { background:rgba(100,149,237,.2); color:#6495ed; }
+  .type-match      { background:rgba(76,175,80,.2); color:var(--success); }
+  .type-ban        { background:rgba(211,47,47,.2); color:#e57373; }
+  .type-map        { background:rgba(255,193,7,.2); color:#ffc107; }
+  .type-admin      { background:rgba(200,100,255,.2); color:#c864ff; }
+  .type-season     { background:rgba(255,150,50,.2); color:#ff9632; }
+  .type-queue      { background:rgba(150,220,255,.2); color:#96dcff; }
+  .type-server     { background:rgba(180,180,180,.2); color:#bbb; }
+  .detail-cell     { max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem; color:var(--text-secondary); }
+  .btn             { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; text-decoration:none; display:inline-block; }
+  .btn-ghost       { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-accent      { background:var(--accent); color:#000; }
+  .btn-accent:hover{ background:#d49b00; }
+  .empty-state     { color:var(--text-secondary); font-style:italic; }
+  .pagination      { display:flex; align-items:center; gap:1rem; margin-top:1.25rem; justify-content:center; }
+  .page-btn        { padding:0.35rem 0.9rem; border:1px solid var(--border); border-radius:var(--border-radius); color:var(--accent); text-decoration:none; font-size:0.85rem; }
+  .page-btn:hover  { border-color:var(--accent); }
+  .page-info       { color:var(--text-secondary); font-size:0.85rem; }
+</style>
+{% endblock %}

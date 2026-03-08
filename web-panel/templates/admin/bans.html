@@ -35,6 +35,16 @@
         <button type="submit" class="btn btn-danger">Ban</button>
       </div>
     </div>
+    <!-- Duration presets -->
+    <div class="preset-row">
+      <span class="preset-label">Quick presets:</span>
+      <button type="button" class="preset-btn" onclick="setDur(30)">30 min</button>
+      <button type="button" class="preset-btn" onclick="setDur(120)">2 h</button>
+      <button type="button" class="preset-btn" onclick="setDur(1440)">1 day</button>
+      <button type="button" class="preset-btn" onclick="setDur(10080)">7 days</button>
+      <button type="button" class="preset-btn" onclick="setDur(43200)">30 days</button>
+      <button type="button" class="preset-btn" onclick="setDur(0)">Permanent</button>
+    </div>
   </form>
 </div>
 
@@ -57,8 +67,13 @@
     <tbody>
       {% for b in bans %}
       <tr>
-        <td><code>{{ b.steam_id }}</code></td>
-        <td>{{ b.name or '—' }}</td>
+        <td><code class="small-code">{{ b.steam_id }}</code></td>
+        <td>
+          {% if b.name %}
+          <a href="{{ url_for('players_bp.player_detail', steam_id=b.steam_id) }}"
+             class="player-link">{{ b.name }}</a>
+          {% else %}—{% endif %}
+        </td>
         <td>{{ b.reason or '—' }}</td>
         <td>{{ b.banned_by or '—' }}</td>
         <td>{{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '—' }}</td>
@@ -71,7 +86,7 @@
         </td>
         <td>
           <form method="post" action="{{ url_for('admin_bp.unban_player') }}"
-                onsubmit="return confirm('Lift ban for {{ b.steam_id }}?')">
+                onsubmit="return confirm('Lift ban for {{ b.name or b.steam_id }}?')">
             <input type="hidden" name="steam_id" value="{{ b.steam_id }}" />
             <button type="submit" class="btn btn-ghost btn-sm btn-unban">Unban</button>
           </form>
@@ -84,6 +99,42 @@
   <p class="empty-state">No active bans.</p>
   {% endif %}
 </div>
+
+<!-- ── Recent unbans ──────────────────────────────────────────────── -->
+{% if recent_unbans %}
+<div class="card admin-section">
+  <h2 class="admin-section-title">Recent Unbans (last 7 days)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Steam ID</th>
+        <th>Player</th>
+        <th>Original reason</th>
+        <th>Banned by</th>
+        <th>Unbanned by</th>
+        <th>Unbanned at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in recent_unbans %}
+      <tr class="row-faded">
+        <td><code class="small-code">{{ b.steam_id }}</code></td>
+        <td>
+          {% if b.name %}
+          <a href="{{ url_for('players_bp.player_detail', steam_id=b.steam_id) }}"
+             class="player-link">{{ b.name }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ b.reason or '—' }}</td>
+        <td>{{ b.banned_by or '—' }}</td>
+        <td>{{ b.unbanned_by or '—' }}</td>
+        <td>{{ b.unbanned_at.strftime('%Y-%m-%d %H:%M') if b.unbanned_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -96,9 +147,16 @@
   .form-group-sm     { flex:0 0 160px; }
   .form-group-btn    { flex:0 0 auto; }
   .form-label        { display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.05em; }
-  .form-input        { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; }
+  .form-input        { width:100%; padding:0.55rem 0.75rem; background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--border-radius); color:var(--text-primary); font-size:0.9rem; box-sizing:border-box; }
   .form-input:focus  { outline:none; border-color:var(--accent); }
-  .btn               { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background var(--transition); }
+  .preset-row        { display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.75rem; align-items:center; }
+  .preset-label      { font-size:0.78rem; color:var(--text-secondary); }
+  .preset-btn        { padding:0.25rem 0.6rem; font-size:0.78rem; border:1px solid var(--border); background:transparent; color:var(--text-secondary); border-radius:var(--border-radius); cursor:pointer; }
+  .preset-btn:hover  { border-color:var(--accent); color:var(--accent); }
+  .player-link       { color:var(--accent); text-decoration:none; }
+  .player-link:hover { text-decoration:underline; }
+  .small-code        { font-size:0.75rem; }
+  .btn               { padding:0.55rem 1.1rem; border:none; border-radius:var(--border-radius); font-size:0.9rem; font-weight:600; cursor:pointer; transition:background 0.15s; }
   .btn-ghost         { background:transparent; border:1px solid var(--border); color:var(--text-secondary); }
   .btn-ghost:hover   { border-color:var(--accent); color:var(--accent); }
   .btn-sm            { padding:0.35rem 0.8rem; font-size:0.8rem; }
@@ -108,5 +166,9 @@
   .btn-unban:hover   { background:rgba(76,175,80,.1); }
   .badge-perm        { color:var(--danger); font-size:0.8rem; font-weight:600; }
   .empty-state       { color:var(--text-secondary); font-style:italic; padding:0.5rem 0; }
+  .row-faded         { opacity:0.65; }
 </style>
+<script>
+  function setDur(val) { document.getElementById('ban_duration').value = val; }
+</script>
 {% endblock %}
