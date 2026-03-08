@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Sign In — CS:GO Matchmaking{% endblock %}
+
+{% block content %}
+<section class="login-page">
+  <div class="login-card">
+
+    <div class="login-logo">
+      <span class="logo-bracket">[</span>CS:GO<span class="logo-accent">MM</span><span class="logo-bracket">]</span>
+    </div>
+
+    <h1 class="login-title">Welcome back</h1>
+    <p class="login-sub">Sign in with your Steam account to access your personal dashboard.</p>
+
+    <a href="{{ url_for('auth_bp.steam_redirect') }}" class="btn-steam-login">
+      <svg class="steam-icon" viewBox="0 0 233 233" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M116.5 0C52.2 0 0 52.2 0 116.5c0 55.3 38.5 101.6 90.5 113.3l38.4-94.5c-3.3 1-6.8 1.5-10.4 1.5-22.1 0-40-17.9-40-40s17.9-40 40-40 40 17.9 40 40c0 3.4-.4 6.7-1.2 9.9l-90.7 37.6C67.8 144 66 148.6 66 153.5c0 13.3 10.7 24 24 24 9.5 0 17.7-5.5 21.7-13.5l24.6-60.6c17.8 2.6 31.7 18 31.7 36.6 0 20.4-16.6 37-37 37-5.3 0-10.3-1.1-14.8-3.1l-38.4 94.5c8.3 2.1 17 3.2 25.9 3.2 64.3 0 116.5-52.2 116.5-116.5S180.8 0 116.5 0z"/>
+      </svg>
+      Sign in through Steam
+    </a>
+
+    <p class="login-note">
+      No account needed — your Steam identity is used directly.<br>
+      Your stats are automatically linked to your Steam ID.
+    </p>
+
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 120px);
+    padding: 2rem 1rem;
+  }
+
+  .login-card {
+    background: var(--card-bg, #1a1a2e);
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
+    border-radius: 12px;
+    padding: 3rem 2.5rem;
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .login-logo {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    margin-bottom: 1.5rem;
+  }
+
+  .login-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+    color: var(--text-primary, #eee);
+  }
+
+  .login-sub {
+    color: var(--text-secondary, #888);
+    font-size: 0.9rem;
+    margin: 0 0 2rem;
+    line-height: 1.5;
+  }
+
+  .btn-steam-login {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1b2838;
+    color: #c6d4df;
+    border: 1px solid #4c6b7a;
+    border-radius: 4px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    cursor: pointer;
+  }
+  .btn-steam-login:hover {
+    background: #2a3f52;
+    border-color: #77a1c0;
+    color: #fff;
+  }
+
+  .steam-icon {
+    width: 24px;
+    height: 24px;
+    fill: #c6d4df;
+    flex-shrink: 0;
+    transition: fill 0.2s;
+  }
+  .btn-steam-login:hover .steam-icon { fill: #fff; }
+
+  .login-note {
+    color: var(--text-secondary, #666);
+    font-size: 0.78rem;
+    margin-top: 1.5rem;
+    line-height: 1.6;
+  }
+</style>
+{% endblock %}

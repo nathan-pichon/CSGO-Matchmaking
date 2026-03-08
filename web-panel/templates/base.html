@@ -14,7 +14,7 @@
   ================================================================ -->
   <nav class="navbar">
     <div class="navbar-inner">
-      <a class="navbar-logo" href="{{ url_for('leaderboard_bp.leaderboard') }}">
+      <a class="navbar-logo" href="{{ url_for('home_bp.index') }}">
         <span class="logo-bracket">[</span>CS:GO<span class="logo-accent">MM</span><span class="logo-bracket">]</span>
       </a>
 
@@ -23,6 +23,14 @@
       </button>
 
       <ul class="navbar-links" id="navLinks">
+        {% if current_user %}
+        <li>
+          <a href="{{ url_for('auth_bp.dashboard') }}"
+             class="nav-link {% if request.endpoint == 'auth_bp.dashboard' %}active{% endif %}">
+            Dashboard
+          </a>
+        </li>
+        {% endif %}
         <li>
           <a href="{{ url_for('leaderboard_bp.leaderboard') }}"
              class="nav-link {% if request.endpoint == 'leaderboard_bp.leaderboard' %}active{% endif %}">
@@ -48,8 +56,113 @@
         <input type="text" name="q" placeholder="Search player…" class="nav-search-input" autocomplete="off" />
         <button type="submit" class="nav-search-btn" aria-label="Search">&#9906;</button>
       </form>
+
+      <!-- User menu -->
+      <div class="nav-user-menu">
+        {% if current_user %}
+          {% if current_user.is_admin %}
+          <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-nav btn-nav-admin"
+             title="{{ current_user.admin_role | capitalize }}">
+            &#9881; Admin
+          </a>
+          {% endif %}
+          <a href="{{ url_for('players_bp.player_detail', steam_id=current_user.steam_id) }}"
+             class="nav-username" title="{{ current_user.steam_id }}">
+            {{ current_user.steam_name | truncate(20, True, '…') }}
+          </a>
+          <a href="{{ url_for('auth_bp.logout') }}" class="btn-nav btn-nav-outline">Sign out</a>
+        {% else %}
+          <a href="{{ url_for('auth_bp.login') }}" class="btn-nav btn-nav-steam">
+            <svg viewBox="0 0 233 233" class="btn-steam-svg" aria-hidden="true">
+              <path d="M116.5 0C52.2 0 0 52.2 0 116.5c0 55.3 38.5 101.6 90.5 113.3l38.4-94.5c-3.3 1-6.8 1.5-10.4 1.5-22.1 0-40-17.9-40-40s17.9-40 40-40 40 17.9 40 40c0 3.4-.4 6.7-1.2 9.9l-90.7 37.6C67.8 144 66 148.6 66 153.5c0 13.3 10.7 24 24 24 9.5 0 17.7-5.5 21.7-13.5l24.6-60.6c17.8 2.6 31.7 18 31.7 36.6 0 20.4-16.6 37-37 37-5.3 0-10.3-1.1-14.8-3.1l-38.4 94.5c8.3 2.1 17 3.2 25.9 3.2 64.3 0 116.5-52.2 116.5-116.5S180.8 0 116.5 0z"/>
+            </svg>
+            Login
+          </a>
+        {% endif %}
+      </div>
     </div>
   </nav>
+
+  <style>
+    /* ── User menu ── */
+    .nav-user-menu {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .btn-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-nav-admin {
+      background: rgba(255, 160, 0, 0.12);
+      color: #ffb700;
+      border: 1px solid rgba(255, 160, 0, 0.3);
+    }
+    .btn-nav-admin:hover {
+      background: rgba(255, 160, 0, 0.22);
+      border-color: #ffb700;
+    }
+
+    .btn-nav-outline {
+      background: transparent;
+      color: var(--text-secondary, #888);
+      border: 1px solid var(--border, rgba(255,255,255,0.12));
+    }
+    .btn-nav-outline:hover {
+      color: var(--text-primary, #eee);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    .btn-nav-steam {
+      background: #1b2838;
+      color: #c6d4df;
+      border: 1px solid #4c6b7a;
+    }
+    .btn-nav-steam:hover {
+      background: #2a3f52;
+      border-color: #77a1c0;
+      color: #fff;
+    }
+
+    .btn-steam-svg {
+      width: 16px; height: 16px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+
+    .nav-username {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-primary, #eee);
+      text-decoration: none;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+    }
+    .nav-username:hover { color: var(--accent, #f0b429); }
+
+    @media (max-width: 640px) {
+      .nav-username { display: none; }
+      .nav-user-menu { gap: 0.35rem; }
+    }
+  </style>
 
   <!-- ================================================================
        FLASH MESSAGES

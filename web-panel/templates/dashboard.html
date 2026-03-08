@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CS:GO Matchmaking{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     PLAYER BANNER
+================================================================ -->
+<section class="dash-hero">
+  <div class="container">
+    <div class="dash-hero-inner">
+      <div class="dash-avatar">
+        <span class="dash-avatar-icon">&#128100;</span>
+      </div>
+      <div class="dash-hero-info">
+        <h1 class="dash-name">
+          {% if player %}{{ player.name }}{% else %}{{ steam_id }}{% endif %}
+        </h1>
+        <div class="dash-rank-badge" style="color: {{ rank_color }}">
+          {{ rank_name }}
+        </div>
+        <div class="dash-steam-id">{{ steam_id }}</div>
+      </div>
+      <div class="dash-hero-actions">
+        <a href="{{ url_for('players_bp.player_detail', steam_id=steam_id) }}"
+           class="btn btn-outline btn-sm">View Full Profile →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     STAT CARDS
+================================================================ -->
+<section class="section">
+  <div class="container">
+    <div class="stat-grid stat-grid-4">
+
+      <div class="stat-card">
+        <div class="stat-card-icon" style="color: {{ rank_color }}">&#11088;</div>
+        <div class="stat-card-value" style="color: {{ rank_color }}">
+          {% if player %}{{ player.elo }}{% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">ELO Rating</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-icon">&#127942;</div>
+        <div class="stat-card-value">
+          {% if player and player.matches_played %}{{ win_rate }}%{% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">Win Rate</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-icon">&#127919;</div>
+        <div class="stat-card-value">
+          {% if player and player.matches_played %}{{ kd }}{% else %}—{% endif %}
+        </div>
+        <div class="stat-card-label">K/D Ratio</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-icon">&#127939;</div>
+        <div class="stat-card-value">
+          {% if player %}{{ player.matches_played or 0 }}{% else %}0{% endif %}
+        </div>
+        <div class="stat-card-label">Matches Played</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     ELO SPARKLINE  +  W/L/T breakdown
+================================================================ -->
+{% if player and player.matches_played %}
+<section class="section section-alt">
+  <div class="container">
+    <div class="dash-two-col">
+
+      <!-- W/L/T -->
+      <div class="dash-col">
+        <h2 class="section-title">Record</h2>
+        <div class="wlt-row">
+          <div class="wlt-box wlt-win">
+            <div class="wlt-count">{{ player.wins or 0 }}</div>
+            <div class="wlt-label">Wins</div>
+          </div>
+          <div class="wlt-box wlt-loss">
+            <div class="wlt-count">{{ player.losses or 0 }}</div>
+            <div class="wlt-label">Losses</div>
+          </div>
+          <div class="wlt-box wlt-tie">
+            <div class="wlt-count">{{ player.ties or 0 }}</div>
+            <div class="wlt-label">Ties</div>
+          </div>
+        </div>
+        <div class="wlt-bar-wrap">
+          {% set total = (player.wins or 0) + (player.losses or 0) + (player.ties or 0) %}
+          {% if total > 0 %}
+          <div class="wlt-bar">
+            <div class="wlt-bar-win"  style="width:{{ ((player.wins or 0) / total * 100)|round(1) }}%"></div>
+            <div class="wlt-bar-tie"  style="width:{{ ((player.ties or 0) / total * 100)|round(1) }}%"></div>
+            <div class="wlt-bar-loss" style="width:{{ ((player.losses or 0) / total * 100)|round(1) }}%"></div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ELO sparkline -->
+      {% if elo_points|length >= 2 %}
+      <div class="dash-col">
+        <h2 class="section-title">ELO Trend</h2>
+        <div class="elo-spark-wrap">
+          {% set min_elo = elo_points | min %}
+          {% set max_elo = elo_points | max %}
+          {% set elo_range = [max_elo - min_elo, 1] | max %}
+          {% set w = 320 %}
+          {% set h = 80 %}
+          {% set pts = namespace(val="") %}
+          {% for e in elo_points %}
+            {% set x = (loop.index0 / (elo_points|length - 1) * w) | round(1) %}
+            {% set y = (h - ((e - min_elo) / elo_range * (h - 10) + 5)) | round(1) %}
+            {% set pts.val = pts.val ~ x ~ "," ~ y ~ " " %}
+          {% endfor %}
+          <svg viewBox="0 0 {{ w }} {{ h }}" class="elo-spark" preserveAspectRatio="none">
+            <polyline points="{{ pts.val.strip() }}"
+                      fill="none"
+                      stroke="{{ rank_color }}"
+                      stroke-width="2"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"/>
+          </svg>
+          <div class="elo-spark-labels">
+            <span>{{ elo_points | first }}</span>
+            <span style="color:{{ rank_color }}"><strong>{{ elo_points | last }}</strong></span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ================================================================
+     RECENT MATCHES
+================================================================ -->
+<section class="section{% if not (player and player.matches_played) %} section-alt{% endif %}">
+  <div class="container">
+    <h2 class="section-title">Recent Matches</h2>
+
+    {% if recent_matches %}
+    <table class="dash-table">
+      <thead>
+        <tr>
+          <th>Result</th>
+          <th>Map</th>
+          <th>Score</th>
+          <th>K</th>
+          <th>D</th>
+          <th>A</th>
+          <th>ELO</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in recent_matches %}
+        <tr class="result-row-{{ m.result }}">
+          <td>
+            {% if m.result == 'win' %}
+              <span class="result-pill pill-win">W</span>
+            {% elif m.result == 'loss' %}
+              <span class="result-pill pill-loss">L</span>
+            {% else %}
+              <span class="result-pill pill-tie">T</span>
+            {% endif %}
+          </td>
+          <td class="map-name">{{ m.map_name }}</td>
+          <td class="score-cell">
+            {% if m.team == 'team1' %}
+              <strong>{{ m.team1_score }}</strong> – {{ m.team2_score }}
+            {% else %}
+              {{ m.team1_score }} – <strong>{{ m.team2_score }}</strong>
+            {% endif %}
+          </td>
+          <td>{{ m.kills }}</td>
+          <td class="death-val">{{ m.deaths }}</td>
+          <td>{{ m.assists }}</td>
+          <td class="elo-delta {% if m.elo_change is not none and m.elo_change >= 0 %}elo-pos{% else %}elo-neg{% endif %}">
+            {% if m.elo_change is not none %}
+              {% if m.elo_change >= 0 %}+{{ m.elo_change }}{% else %}{{ m.elo_change }}{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('matches_bp.match_detail', match_id=m.id) }}"
+               class="table-link">Details</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <a href="{{ url_for('players_bp.player_detail', steam_id=steam_id) }}"
+       class="btn btn-outline btn-sm home-more">Full match history →</a>
+
+    {% else %}
+    <div class="empty-state">
+      <p>No matches found yet. Queue up and play your first match!</p>
+      <p class="empty-hint">Type <code>!queue</code> in-game to join the matchmaking queue.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* ── Hero banner ── */
+  .dash-hero {
+    background: linear-gradient(135deg, rgba(255,200,50,0.04) 0%, rgba(30,30,50,0) 60%);
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.07));
+    padding: 2rem 0;
+  }
+  .dash-hero-inner {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .dash-avatar {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid var(--border, rgba(255,255,255,0.1));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+  .dash-hero-info { flex: 1; min-width: 0; }
+  .dash-name {
+    font-size: 1.6rem; font-weight: 700;
+    margin: 0 0 0.2rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dash-rank-badge { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .dash-steam-id { font-size: 0.75rem; color: var(--text-secondary, #777); font-family: monospace; }
+  .dash-hero-actions { margin-left: auto; }
+
+  /* ── 4-column stat grid (reuse) ── */
+  .stat-grid-4 { grid-template-columns: repeat(4,1fr); }
+  @media(max-width:768px){ .stat-grid-4 { grid-template-columns: repeat(2,1fr); } }
+  @media(max-width:480px){ .stat-grid-4 { grid-template-columns: 1fr; } }
+
+  /* ── Two-column layout ── */
+  .dash-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+  @media(max-width:768px){ .dash-two-col { grid-template-columns: 1fr; } }
+
+  /* ── W/L/T ── */
+  .wlt-row { display: flex; gap: 1rem; margin-bottom: 1rem; }
+  .wlt-box { flex: 1; text-align: center; padding: 1rem; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border, rgba(255,255,255,0.07)); }
+  .wlt-count { font-size: 1.8rem; font-weight: 700; }
+  .wlt-label { font-size: 0.75rem; color: var(--text-secondary, #888); text-transform: uppercase; letter-spacing: 0.05em; }
+  .wlt-win  .wlt-count { color: #2ecc71; }
+  .wlt-loss .wlt-count { color: #e74c3c; }
+  .wlt-tie  .wlt-count { color: #95a5a6; }
+  .wlt-bar-wrap { margin-top: 0.5rem; }
+  .wlt-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,0.05); }
+  .wlt-bar-win  { background: #2ecc71; }
+  .wlt-bar-tie  { background: #7f8c8d; }
+  .wlt-bar-loss { background: #e74c3c; }
+
+  /* ── ELO sparkline ── */
+  .elo-spark-wrap { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid var(--border,rgba(255,255,255,0.07)); }
+  .elo-spark { width: 100%; height: 80px; display: block; }
+  .elo-spark-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary,#888); margin-top: 0.4rem; }
+
+  /* ── Recent matches table ── */
+  .dash-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .dash-table th {
+    text-align: left; padding: 0.45rem 0.6rem;
+    color: var(--text-secondary, #888); font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  }
+  .dash-table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border, rgba(255,255,255,0.05)); vertical-align: middle; }
+  .dash-table tr:last-child td { border-bottom: none; }
+  .dash-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .result-row-win  td:first-child { border-left: 3px solid #2ecc71; }
+  .result-row-loss td:first-child { border-left: 3px solid #e74c3c; }
+  .result-row-tie  td:first-child { border-left: 3px solid #7f8c8d; }
+
+  .result-pill { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 3px; }
+  .pill-win  { background: rgba(46,204,113,0.15); color: #2ecc71; }
+  .pill-loss { background: rgba(231,76,60,0.15);  color: #e74c3c; }
+  .pill-tie  { background: rgba(127,140,141,0.15); color: #95a5a6; }
+
+  .map-name  { font-weight: 500; }
+  .death-val { color: var(--text-secondary, #888); }
+  .elo-pos   { color: #2ecc71; font-weight: 600; }
+  .elo-neg   { color: #e74c3c; font-weight: 600; }
+  .table-link { color: var(--accent, #f0b429); font-size: 0.8rem; text-decoration: none; }
+  .table-link:hover { text-decoration: underline; }
+  .score-cell { font-variant-numeric: tabular-nums; }
+
+  /* ── Empty state ── */
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary, #888); }
+  .empty-hint  { font-size: 0.85rem; margin-top: 0.5rem; }
+  .empty-hint code { background: rgba(255,255,255,0.07); padding: 0.1rem 0.4rem; border-radius: 3px; }
+
+  .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+  .home-more { margin-top: 1rem; display: inline-block; }
+</style>
+{% endblock %}
