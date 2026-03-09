@@ -241,9 +241,19 @@ WEBPANEL_UNIT
 
 _generate_macos_launchd() {
     info "Generating macOS launchd plist for matchmaker (dev mode)..."
-    local plist_dir="${HOME}/Library/LaunchAgents"
+
+    # When run under sudo, HOME is root's home (/var/root). We need the real
+    # user's home so the plist lands in the right LaunchAgents directory and
+    # is owned by that user — launchd refuses plists owned by root.
+    local real_user="${SUDO_USER:-$(logname 2>/dev/null || echo "${USER}")}"
+    local real_home
+    real_home="$(eval echo ~"${real_user}")"
+
+    local plist_dir="${real_home}/Library/LaunchAgents"
     mkdir -p "${plist_dir}"
-    cat > "${plist_dir}/com.csgo-matchmaking.matchmaker.plist" << PLIST_EOF
+    local plist_file="${plist_dir}/com.csgo-matchmaking.matchmaker.plist"
+
+    cat > "${plist_file}" << PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -274,8 +284,12 @@ _generate_macos_launchd() {
 </dict>
 </plist>
 PLIST_EOF
-    ok "launchd plist written to ${plist_dir}"
-    info "To start: launchctl load ${plist_dir}/com.csgo-matchmaking.matchmaker.plist"
+
+    # Give ownership of both the directory and the plist to the real user
+    chown "${real_user}" "${plist_dir}" "${plist_file}"
+
+    ok "launchd plist written to ${plist_file} (owner: ${real_user})"
+    info "To start: launchctl load ${plist_file}"
 }
 
 # ── Post-install validation ────────────────────────────────────────────────────
@@ -284,17 +298,17 @@ validate_installation() {
     print_section "Validating Installation"
     local errors=0 warnings=0
 
-    _validate_mysql_connection    || (( errors++ ))
-    _validate_db_tables           || (( warnings++ ))
-    _validate_gslt_tokens         || (( warnings++ ))
-    _validate_docker_daemon       || (( errors++ ))
-    _validate_docker_image        || (( warnings++ ))
-    _validate_python_matchmaker   || (( warnings++ ))
-    _validate_python_webpanel     || (( warnings++ ))
-    _validate_ports               || (( warnings++ ))
+    _validate_mysql_connection    || (( ++errors ))
+    _validate_db_tables           || (( ++warnings ))
+    _validate_gslt_tokens         || (( ++warnings ))
+    _validate_docker_daemon       || (( ++errors ))
+    _validate_docker_image        || (( ++warnings ))
+    _validate_python_matchmaker   || (( ++warnings ))
+    _validate_python_webpanel     || (( ++warnings ))
+    _validate_ports               || (( ++warnings ))
     _validate_config_permissions
-    _validate_csgo_files          || (( warnings++ ))
-    _run_health_check_script      || (( warnings++ ))
+    _validate_csgo_files          || (( ++warnings ))
+    _run_health_check_script      || (( ++warnings ))
 
     printf '\n'
     if   (( errors == 0 && warnings == 0 )); then ok "All validation checks passed!"

@@ -12,7 +12,18 @@ generate_config() {
     _backup_existing_config
     _write_config_file
     chmod 600 "${CONFIG_FILE}"
-    ok "config.env written (permissions: 600)"
+
+    # The installer runs as root (sudo), but config.env must be owned by the
+    # real invoking user so that the matchmaker and web panel can read it
+    # without running as root.
+    local real_user="${SUDO_USER:-}"
+    if [[ -n "${real_user}" && "${real_user}" != "root" ]]; then
+        chown "${real_user}" "${CONFIG_FILE}"
+        ok "config.env written (permissions: 600, owner: ${real_user})"
+    else
+        ok "config.env written (permissions: 600)"
+    fi
+
     INSTALLED_COMPONENTS+=("config.env")
     ROLLBACK_ACTIONS+=("rm -f ${CONFIG_FILE} 2>/dev/null || true")
 }
@@ -23,6 +34,9 @@ _backup_existing_config() {
     [[ -f "${CONFIG_FILE}" ]] || return 0
     local backup_name="${CONFIG_FILE}.bak.$(date +%Y%m%d_%H%M%S)"
     cp "${CONFIG_FILE}" "${backup_name}"
+    chmod 600 "${backup_name}"
+    local real_user="${SUDO_USER:-}"
+    [[ -n "${real_user}" && "${real_user}" != "root" ]] && chown "${real_user}" "${backup_name}" || true
     ok "Existing config backed up to: ${backup_name}"
 }
 
