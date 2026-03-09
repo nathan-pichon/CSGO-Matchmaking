@@ -30,33 +30,39 @@ Since Valve shut down official CS:GO matchmaking servers, this project recreates
 
 ## Architecture
 
-```
-                    ┌─────────────────────────────────────────┐
-                    │  Lobby Server — spectator-only, ≤64 pl. │
-                    │  SourceMod plugins: queue, party, avoid  │
-                    └────────────────┬────────────────────────┘
-                                     │ DB poll (every 2s)
-                    ┌────────────────▼────────────────────────┐
-                    │           MySQL Database                  │
-                    │  mm_players, mm_queue, mm_matches, …     │
-                    └──┬─────────────────────────┬────────────┘
-                       │                         │
-        ┌──────────────▼──────────┐   ┌──────────▼──────────────┐
-        │  Matchmaker Daemon      │   │  Web Panel (Flask)       │
-        │  Python — factory.py    │   │  Steam OpenID login      │
-        │  ┌─────────┐ ┌───────┐ │   │  Public + admin routes   │
-        │  │ Queue   │ │Server │ │   └─────────────────────────┘
-        │  │ Backend │ │Backend│ │
-        │  │ (MySQL) │ │(Docker│ │
-        │  └─────────┘ └───┬───┘ │
-        └──────────────────┼─────┘
-                           │ spin up / destroy
-              ┌────────────▼────────────────┐
-              │  Match Server (Docker)       │
-              │  csgo_mm_match.sp plugin     │
-              │  stats → DB → match end      │
-              │  → players return to lobby   │
-              └─────────────────────────────┘
+```mermaid
+flowchart TD
+    Player(("Player"))
+
+    Player -->|"connect :27015"| Lobby
+
+    subgraph Lobby["Lobby Server — spectator-only, ≤ 64 players"]
+        LP["csgo_mm_queue · csgo_mm_party · csgo_mm_notify · csgo_mm_admin"]
+    end
+
+    Lobby -->|"queue / party / avoid entries"| DB[("MySQL Database")]
+    DB -->|"poll every 2 s"| MM
+
+    subgraph MM["Matchmaker Daemon — Python"]
+        MM1["mysql_queue · docker_server · elo_ranking · discord_notifier"]
+    end
+
+    MM -->|"spin up / tear down"| MatchServer
+    MM -->|"webhook"| Discord(("Discord"))
+
+    subgraph MatchServer["Match Server — Docker"]
+        SP["csgo_mm_match.sp"]
+    end
+
+    MatchServer -->|"stats & results"| DB
+    MatchServer -->|"redirect on match end"| Player
+
+    DB -->|"read"| WebPanel
+
+    subgraph WebPanel["Web Panel — Flask :5000"]
+        W1["Public: leaderboard · profiles · match history"]
+        W2["Admin: queue · servers · bans · reports · maps · audit log"]
+    end
 ```
 
 > Multiple lobby servers can share the same MySQL database and matchmaker — the existing DB-polling architecture handles it transparently. Set a unique `LOBBY_SERVER_ID` on each lobby instance for admin visibility.
