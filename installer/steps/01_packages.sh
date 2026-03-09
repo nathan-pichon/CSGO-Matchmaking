@@ -6,6 +6,18 @@
 # every supported Linux distribution, plus a minimal macOS (Homebrew) path.
 # ==============================================================================
 
+# _brew [args...]
+# Run Homebrew as the original non-root user so brew doesn't reject root invocations.
+# When the script is called via sudo, SUDO_USER holds the real user name.
+_brew() {
+    local brew_user="${SUDO_USER:-$(logname 2>/dev/null || echo "${USER}")}"
+    if [[ "${EUID}" -eq 0 && -n "${brew_user}" && "${brew_user}" != "root" ]]; then
+        sudo -u "${brew_user}" brew "$@"
+    else
+        brew "$@"
+    fi
+}
+
 # is_installed <package>
 # Returns 0 if the package is already installed by the current package manager.
 is_installed() {
@@ -14,7 +26,7 @@ is_installed() {
         apt)    dpkg -l "${pkg}" 2>/dev/null | grep -q '^ii' ;;
         yum|dnf) rpm -q "${pkg}" &>/dev/null ;;
         pacman) pacman -Q "${pkg}" &>/dev/null ;;
-        brew)   brew list "${pkg}" &>/dev/null ;;
+        brew)   _brew list "${pkg}" &>/dev/null ;;
     esac
 }
 
@@ -310,22 +322,22 @@ _install_packages_brew() {
 
     local brew_pkgs=(curl wget git python3)
     for pkg in "${brew_pkgs[@]}"; do
-        brew list "${pkg}" &>/dev/null && ok "Already installed: ${pkg}" \
-            || { info "Installing ${pkg}..."; brew install "${pkg}"; }
+        _brew list "${pkg}" &>/dev/null && ok "Already installed: ${pkg}" \
+            || { info "Installing ${pkg}..."; _brew install "${pkg}"; }
     done
 
     # Install mysql-client CLI tools only — the MySQL server runs in Docker.
     # mysql-client is keg-only (won't conflict with any server), so we must
     # add it to PATH explicitly for the rest of this session.
-    if brew list mysql-client &>/dev/null; then
+    if _brew list mysql-client &>/dev/null; then
         ok "mysql-client already installed"
     else
         info "Installing mysql-client (CLI tools — server runs in Docker)..."
-        brew install mysql-client
+        _brew install mysql-client
         ok "mysql-client installed"
     fi
     local mc_prefix
-    mc_prefix="$(brew --prefix mysql-client 2>/dev/null || echo "")"
+    mc_prefix="$(_brew --prefix mysql-client 2>/dev/null || echo "")"
     if [[ -n "${mc_prefix}" && -d "${mc_prefix}/bin" ]]; then
         export PATH="${mc_prefix}/bin:${PATH}"
         ok "mysql-client PATH configured: ${mc_prefix}/bin"
@@ -414,6 +426,8 @@ _post_package_install() {
             ok "${mysql_svc} service enabled and started"
         fi
     elif [[ "${OS_TYPE}" == "macos" ]]; then
-        brew services start mariadb 2>/dev/null || true
+        # On macOS, MySQL runs in Docker (started during the database step).
+        # Nothing to start here via brew services.
+        :
     fi
 }
