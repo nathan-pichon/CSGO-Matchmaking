@@ -18,6 +18,20 @@
 #   sudo ./install.sh --dry-run   Run wizard + show plan, make no system changes
 # ==============================================================================
 
+# ── Self-re-exec with bash 4+ on macOS ────────────────────────────────────────
+# macOS ships bash 3.2 (GPL-2 licence). This installer requires bash 4+.
+# If Homebrew has installed a newer bash, transparently re-exec with it so
+# the user doesn't have to remember to invoke the script explicitly with bash4.
+# This block uses only bash 3.2-compatible syntax intentionally.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    for _bash4 in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [ -x "${_bash4}" ] && "${_bash4}" -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]' 2>/dev/null; then
+            exec "${_bash4}" "$0" "$@"
+        fi
+    done
+    # No bash 4 found — fall through and let check_prerequisites report the error.
+fi
+
 set -euo pipefail
 
 # Resolve the project root regardless of the working directory.
