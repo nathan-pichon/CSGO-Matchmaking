@@ -8,11 +8,13 @@ Since Valve shut down official CS:GO matchmaking servers, this project recreates
 
 ### Key Features
 
+- **Spectator-only lobby**: The lobby server is a pure waiting room — players are locked to spectator, no rounds ever start; up to 64 players can queue simultaneously (CS:GO engine hard limit)
 - **Chat-based queue**: `!queue`, `!leave`, `!status`, `!rank`, `!top`, `!lastmatch`
 - **ELO-based matchmaking**: Dynamic spread, placement matches, skill-balanced teams
 - **Ready check system**: 30-second accept/decline window
 - **Automated match servers**: Docker containers spun up on demand with competitive configs
 - **Automatic redirection**: Players seamlessly moved between lobby and match servers
+- **Multi-lobby scaling**: Run multiple lobby servers against the same DB/matchmaker — each is tagged with a `LOBBY_SERVER_ID` so the admin panel can show which lobby each queued player came from
 - **Knife round + side choice**: Winner's captain picks CT or T to start
 - **In-match features**: Tactical pauses, surrender vote (`!ff`), player reporting (`!report`)
 - **Persistent statistics**: Kills, deaths, assists, headshots, win rate, ELO history
@@ -26,9 +28,9 @@ Since Valve shut down official CS:GO matchmaking servers, this project recreates
 ## Architecture
 
 ```
-Player --(!queue)--> [Lobby Server + SourceMod Plugins]
+Player --(!queue)--> [Lobby Server — spectator-only, up to 64 players]
                             |
-                     [MySQL Database]
+                     [MySQL Database]  <-- lobby_server_id tags each queue entry
                             |
                      [Matchmaker Daemon (Python)]
                        |          |
@@ -39,6 +41,8 @@ Player --(!queue)--> [Lobby Server + SourceMod Plugins]
                             |
                      [Web Panel (Flask)] <-- Steam OpenID login
 ```
+
+> Multiple lobby servers can share the same MySQL database and matchmaker — the existing DB-polling architecture handles it transparently. The `LOBBY_SERVER_ID` variable tags each queue entry with its originating lobby for admin visibility.
 
 ### Modular Design
 
@@ -125,8 +129,9 @@ Player profiles (`/player/<steam_id>`) also show an **admin overlay panel** — 
 
 1. Launch CS:GO Legacy
 2. Open the console: `connect YOUR_SERVER_IP:27015`
-3. Type `!queue` in chat to join matchmaking
-4. When 10 players are ready, accept the ready check — you'll be redirected automatically
+3. You land in **spectator mode** on the lobby server — this is intentional. The lobby is a waiting room only; no rounds ever start here.
+4. Type `!queue` in chat to join matchmaking
+5. When 10 players are ready, accept the ready check — you'll be redirected automatically to a dedicated match server
 
 ### Service Management
 
