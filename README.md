@@ -1,6 +1,6 @@
 # CS:GO Competitive Matchmaking System
 
-A community-driven competitive matchmaking system for CS:GO Legacy, providing automated 5v5 competitive matches with ELO-based ranking, persistent statistics, and seamless player experience.
+A community-driven competitive matchmaking system for CS:GO Legacy, providing automated 5v5 competitive matches with ELO-based ranking, persistent statistics, and a seamless player experience.
 
 ## Overview
 
@@ -9,40 +9,57 @@ Since Valve shut down official CS:GO matchmaking servers, this project recreates
 ### Key Features
 
 - **Spectator-only lobby**: The lobby server is a pure waiting room — players are locked to spectator, no rounds ever start; up to 64 players can queue simultaneously (CS:GO engine hard limit)
-- **Chat-based queue**: `!queue`, `!leave`, `!status`, `!rank`, `!top`, `!lastmatch`
+- **Chat-based queue**: `!queue`, `!leave`, `!status`, `!rank`, `!top`, `!stats`, `!lastmatch`, `!recent`
+- **Command discoverability**: Welcome panel on connect + `!help` reopens the full command guide at any time — no chat flooding (SourceMod suppresses `!` commands from public chat)
+- **Party system**: `!party invite/accept/decline/leave/kick/list` — queue as a group, parties are kept together in the same match
+- **Avoid system**: `!avoid <name>` prevents two players from being matched together for 7 days; `!avoidlist` to review
 - **ELO-based matchmaking**: Dynamic spread, placement matches, skill-balanced teams
 - **Ready check system**: 30-second accept/decline window
 - **Automated match servers**: Docker containers spun up on demand with competitive configs
 - **Automatic redirection**: Players seamlessly moved between lobby and match servers
-- **Multi-lobby scaling**: Run multiple lobby servers against the same DB/matchmaker — each is tagged with a `LOBBY_SERVER_ID` so the admin panel can show which lobby each queued player came from
 - **Knife round + side choice**: Winner's captain picks CT or T to start
-- **In-match features**: Tactical pauses, surrender vote (`!ff`), player reporting (`!report`)
+- **In-match features**: Tactical pauses (`!pause`/`!unpause`), surrender vote (`!ff`), live score (`!score`), player reporting (`!report`)
 - **Persistent statistics**: Kills, deaths, assists, headshots, win rate, ELO history
 - **Abandon penalties**: Progressive cooldowns (30 min → 7 days) for players who quit mid-match
 - **Web panel**: Leaderboard, player profiles, match history — login with Steam
 - **Admin panel**: Full server management from the browser — queue monitor, live server controls, player search, ban/unban, map pool CRUD, activity audit log; no game client needed
 - **Seasonal rankings**: Periodic ELO resets with historical data preservation
 - **Discord notifications**: Match found, results, rank changes via webhooks
+- **Multi-lobby scaling**: Run multiple lobby servers against the same DB/matchmaker — each tagged with `LOBBY_SERVER_ID` for admin visibility
 - **Cloud-aware installer**: Auto-detects AWS, GCP, Azure, Hetzner, DigitalOcean, OVH and shows provider-specific firewall setup instructions
 
 ## Architecture
 
 ```
-Player --(!queue)--> [Lobby Server — spectator-only, up to 64 players]
-                            |
-                     [MySQL Database]  <-- lobby_server_id tags each queue entry
-                            |
-                     [Matchmaker Daemon (Python)]
-                       |          |
-            [Queue Backend]   [Server Backend]
-            (MySQL poll)      (Docker)
-                       |          |
-                     [Match Server (Docker)] --> match end --> back to lobby
-                            |
-                     [Web Panel (Flask)] <-- Steam OpenID login
+                    ┌─────────────────────────────────────────┐
+                    │  Lobby Server — spectator-only, ≤64 pl. │
+                    │  SourceMod plugins: queue, party, avoid  │
+                    └────────────────┬────────────────────────┘
+                                     │ DB poll (every 2s)
+                    ┌────────────────▼────────────────────────┐
+                    │           MySQL Database                  │
+                    │  mm_players, mm_queue, mm_matches, …     │
+                    └──┬─────────────────────────┬────────────┘
+                       │                         │
+        ┌──────────────▼──────────┐   ┌──────────▼──────────────┐
+        │  Matchmaker Daemon      │   │  Web Panel (Flask)       │
+        │  Python — factory.py    │   │  Steam OpenID login      │
+        │  ┌─────────┐ ┌───────┐ │   │  Public + admin routes   │
+        │  │ Queue   │ │Server │ │   └─────────────────────────┘
+        │  │ Backend │ │Backend│ │
+        │  │ (MySQL) │ │(Docker│ │
+        │  └─────────┘ └───┬───┘ │
+        └──────────────────┼─────┘
+                           │ spin up / destroy
+              ┌────────────▼────────────────┐
+              │  Match Server (Docker)       │
+              │  csgo_mm_match.sp plugin     │
+              │  stats → DB → match end      │
+              │  → players return to lobby   │
+              └─────────────────────────────┘
 ```
 
-> Multiple lobby servers can share the same MySQL database and matchmaker — the existing DB-polling architecture handles it transparently. The `LOBBY_SERVER_ID` variable tags each queue entry with its originating lobby for admin visibility.
+> Multiple lobby servers can share the same MySQL database and matchmaker — the existing DB-polling architecture handles it transparently. Set a unique `LOBBY_SERVER_ID` on each lobby instance for admin visibility.
 
 ### Modular Design
 
@@ -55,7 +72,7 @@ The Python matchmaker uses abstract interfaces (ABC) for all swappable component
 | Ranking system | ELO | Glicko-2, TrueSkill |
 | Notifications | Discord webhooks | Slack, Telegram, email |
 
-Change backends by setting `QUEUE_BACKEND`, `SERVER_BACKEND`, etc. in `config.env`.
+Change backends by setting `QUEUE_BACKEND`, `SERVER_BACKEND`, `RANKING_BACKEND`, `NOTIFICATION_BACKEND` in `config.env`.
 
 ## Quick Start
 
@@ -79,17 +96,17 @@ The interactive wizard walks you through every required decision, then handles t
 
 1. **System packages** — installs SteamCMD, MySQL/MariaDB, Python, Docker, and all dependencies
 2. **MySQL setup** — uses an existing instance or installs a fresh one, creates the database and user
-3. **Network** — lobby port (27015), web panel port (8080), match server port range (27020–27029)
+3. **Network** — lobby port (27015), web panel port (5000), match server port range (27020–27029)
 4. **Matchmaking rules** — ELO spread, players per team, queue timeout
 5. **CS:GO server** — downloads the dedicated server via SteamCMD (can take 20–30 min on first run)
 6. **Map pool** — choose which competitive maps to include
 7. **GSLTs** — your Game Server Login Tokens for lobby and match servers
-8. **Web panel** — admin password, Discord webhook (optional), your SteamID for the admin account
+8. **Web panel** — admin token (auto-generated), Discord webhook (optional), your SteamID for the first super-admin account
 9. **Cloud firewall notice** — if a cloud provider is detected, shows provider-specific port-opening instructions before you confirm
 
 When the wizard finishes, the installer:
 - Installs SourceMod, MetaMod, and all plugins
-- Compiles match-server plugins using the installed `spcomp` binary
+- Compiles match-server and lobby plugins using the installed `spcomp` binary
 - Builds the Docker image for match servers
 - Opens the required ports (UFW / firewalld / iptables)
 - Creates and **starts** all three systemd services immediately
@@ -112,12 +129,12 @@ Everything you need to run the server is available from the browser — no game 
 | Page | What you can do |
 |------|-----------------|
 | **Dashboard** | 8 live stat cards (matches, queue, bans, reports, players, ports, GSLT tokens) + nav tiles |
-| **Queue monitor** | See every queued player with wait time; kick anyone instantly |
+| **Queue monitor** | See every queued player with wait time and lobby origin; kick anyone instantly |
 | **Servers** | RCON broadcast to the lobby or any live match; cancel a running match |
 | **Matches** | Full match history with status filter; force-cleanup stuck containers |
-| **Players** | Search by name/SteamID; tabs for banned/abandon/flagged; ban, unban, set ELO inline |
+| **Players** | Search by name/SteamID; tabs for banned/abandon history/flagged; ban, unban, set ELO inline |
 | **Bans** | Issue bans with duration presets; history preserved on unban (soft-delete) |
-| **Reports** | Flagged players (≥ 3 reporters); drill-down to individual reports; quick-ban modal |
+| **Reports** | Flagged players (≥ 3 reporters in 30 days); drill-down to individual reports; quick-ban modal |
 | **Map pool** | Toggle maps active/inactive, adjust selection weight, add or remove maps |
 | **Activity log** | Full audit trail of every admin write action, filterable by admin and action type |
 | **Admin roster** | Add/remove admins, change roles (superadmin only) |
@@ -130,7 +147,7 @@ Player profiles (`/player/<steam_id>`) also show an **admin overlay panel** — 
 1. Launch CS:GO Legacy
 2. Open the console: `connect YOUR_SERVER_IP:27015`
 3. You land in **spectator mode** on the lobby server — this is intentional. The lobby is a waiting room only; no rounds ever start here.
-4. Type `!queue` in chat to join matchmaking
+4. Type `!queue` in chat to join matchmaking (or `!help` for the full command guide)
 5. When 10 players are ready, accept the ready check — you'll be redirected automatically to a dedicated match server
 
 ### Service Management
@@ -151,58 +168,90 @@ journalctl -u csgo-webpanel -f
 
 ```
 CSGO-Matchmaking/
-├── install.sh                  # One-command installation wizard
-├── SETUP.md                    # Detailed setup guide (cloud providers, troubleshooting)
-├── config.example.env          # Configuration template
-├── database/schema.sql         # Database schema and default data
-├── matchmaker/                 # Python matchmaker daemon
-│   ├── interfaces/             # Abstract interfaces (ABC)
-│   ├── backends/               # Concrete implementations
-│   │   ├── mysql_queue.py      # Queue management
-│   │   ├── docker_server.py    # Match server orchestration
-│   │   ├── elo_ranking.py      # ELO calculation
-│   │   └── discord_notifier.py # Discord webhooks
-│   └── tests/                  # Unit tests
-├── lobby-server/               # Lobby SourceMod plugins
-│   ├── sourcemod/scripting/    # SourcePawn source (.sp)
-│   └── cfg/                    # Server configuration
-├── match-server/               # Docker match server
+├── install.sh                    # One-command installation wizard
+├── config.example.env            # Configuration template (copy → config.env)
+├── database/schema.sql           # Full DB schema + seed data + migration history
+├── matchmaker/                   # Python matchmaker daemon
+│   ├── matchmaker.py             # Main loop
+│   ├── factory.py                # Backend wiring (reads QUEUE_BACKEND etc.)
+│   ├── db.py                     # MySQL connection helper
+│   ├── season_manager.py         # Season start + ELO soft-reset logic
+│   ├── rcon_client.py            # Fault-tolerant RCON client (3 retries + backoff)
+│   ├── interfaces/               # Abstract base classes (ABC)
+│   │   ├── queue_backend.py
+│   │   ├── server_backend.py
+│   │   ├── ranking.py
+│   │   └── notification.py
+│   ├── backends/                 # Concrete implementations
+│   │   ├── mysql_queue.py        # Queue management (DB polling)
+│   │   ├── docker_server.py      # Match server orchestration (Docker SDK)
+│   │   ├── elo_ranking.py        # ELO calculation with K-factor and placement
+│   │   ├── discord_notifier.py   # Discord webhook notifications
+│   │   └── noop_notifier.py      # No-op notifier (when webhooks disabled)
+│   └── tests/                    # Unit tests
+├── lobby-server/                 # Lobby SRCDS + SourceMod plugins
+│   ├── sourcemod/scripting/
+│   │   ├── csgo_mm_queue.sp      # Queue, rank, stats, avoid system
+│   │   ├── csgo_mm_party.sp      # Party invite / accept / management
+│   │   ├── csgo_mm_notify.sp     # Welcome panel, !help, HUD hints, spectator lock
+│   │   └── csgo_mm_admin.sp      # In-game admin commands (!mm_ban, !mm_setelo …)
+│   └── cfg/server.cfg            # Lobby server config (spectator-only, warmup lock)
+├── match-server/                 # Docker match server
 │   ├── Dockerfile
-│   ├── sourcemod/
-│   │   ├── scripting/          # Match lifecycle plugin (.sp)
-│   │   ├── plugins/            # Compiled binaries (.smx) — built by installer
-│   │   └── configs/
-│   └── cfg/                    # Competitive configuration
-├── web-panel/                  # Flask web application
-│   ├── routes/                 # Page routes (incl. Steam OpenID auth)
-│   └── templates/              # Jinja2 templates
-├── vendor/                     # Pinned third-party plugin binaries
-│   └── sourcemod/plugins/      # levels_ranks.smx, serverredirect.smx
-└── installer/                  # Installer modules
-    ├── globals.sh
-    ├── lib/                    # Logging, UI, input, system helpers
-    └── steps/                  # 01_packages … 09_services
+│   ├── sourcemod/scripting/
+│   │   └── csgo_mm_match.sp      # Full match lifecycle (whitelist, stats, results)
+│   └── cfg/                      # Competitive config (10-round halves, knife round)
+├── web-panel/                    # Flask web application
+│   ├── app.py                    # App factory + blueprint registration
+│   ├── models.py                 # DB helpers (query_db, execute_db) + RankInfo
+│   ├── config.py                 # Config class (loaded from config.env)
+│   ├── extensions.py             # Flask-Caching, Flask-Limiter setup
+│   ├── routes/
+│   │   ├── admin.py              # All admin routes + _log_action audit helper
+│   │   ├── api.py                # JSON REST endpoints
+│   │   ├── auth.py               # Steam OpenID login / logout
+│   │   ├── home.py               # Landing page
+│   │   ├── leaderboard.py        # ELO leaderboard
+│   │   ├── matches.py            # Match list + detail scoreboard
+│   │   └── players.py            # Player profiles
+│   └── templates/
+│       ├── base.html             # Shared layout (navbar, flash messages, footer)
+│       ├── admin/                # Admin panel templates (11 pages)
+│       └── …                     # Public pages (index, leaderboard, match, player…)
+├── vendor/                       # Pinned third-party plugin binaries
+│   └── sourcemod/plugins/        # levels_ranks.smx, serverredirect.smx
+└── installer/                    # Installer modules
+    ├── lib/                      # Logging, UI, input, system helpers
+    └── steps/                    # 01_packages … 09_services
 ```
 
 ## In-Game Commands
+
+> All commands use the `!` prefix in chat (e.g. `!queue`). SourceMod automatically suppresses the command text from public chat — only the requesting player sees any response, so commands never flood the chat.
 
 ### Player Commands (Lobby Server)
 
 | Command | Description |
 |---------|-------------|
+| `!help` / `!commands` | Open the command guide panel (also shown automatically on first connect) |
 | `!queue` / `!q` | Join the matchmaking queue |
 | `!queue de_mirage` | Join with a map preference |
 | `!leave` | Leave the queue |
-| `!status` | Show queue position and estimated wait time |
+| `!status` | Show queue position and elapsed wait time |
 | `!rank` | Show your ELO and rank tier |
-| `!top` | Show the top 10 players |
+| `!top` | Show the top 10 players by ELO |
 | `!stats` | Show your detailed career statistics |
 | `!lastmatch` | Show your most recent match result and ELO change |
+| `!recent` | Show players from your last 5 matches |
+| `!party` / `!p` | Party management — `!party invite <name>`, `accept`, `decline`, `leave`, `kick <name>`, `list` |
+| `!avoid <name>` | Avoid a player for 7 days (they won't be matched with you) |
+| `!avoidlist` | View your current avoid list |
 
 ### Player Commands (Match Server)
 
 | Command | Description |
 |---------|-------------|
+| `!score` | Show the current match score |
 | `!ff` / `!surrender` | Call a surrender vote (requires 4/5 votes — unconditional loss) |
 | `!pause` | Request a tactical pause at next freeze time (1 per team per match) |
 | `!unpause` | Signal your team is ready to resume (both teams must confirm) |
@@ -215,29 +264,58 @@ CSGO-Matchmaking/
 | Command | Description |
 |---------|-------------|
 | `!mm_forcestart` | Force start a match with the current queue |
-| `!mm_cancelqueue` | Clear all queue entries |
+| `!mm_cancelqueue` | Clear all waiting queue entries |
 | `!mm_ban <player> <minutes> <reason>` | Ban a player from matchmaking |
 | `!mm_unban <steamid>` | Remove a matchmaking ban |
 | `!mm_setelo <player> <elo>` | Override a player's ELO |
-| `!mm_status` | Show system status |
+| `!mm_resetrank <player>` | Reset a player's ELO to 1000 and restart placement |
+| `!mm_status` | Show system status (active matches, queue counts) |
 
 ## Configuration
 
 The installer generates `config.env` from your wizard answers. Key settings you can tune afterwards:
 
+**Matchmaking**
+
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `PLAYERS_PER_TEAM` | `5` | Players per side |
 | `MAX_ELO_SPREAD` | `200` | Starting ELO tolerance for matchmaking |
 | `ELO_SPREAD_INCREASE_INTERVAL` | `60` | Seconds between ELO spread expansions |
-| `ELO_SPREAD_INCREASE_AMOUNT` | `50` | ELO points added per interval |
-| `PLAYERS_PER_TEAM` | `5` | Players per side |
+| `ELO_SPREAD_INCREASE_AMOUNT` | `50` | ELO points added per expansion interval |
 | `READY_CHECK_TIMEOUT` | `30` | Seconds to accept a ready check |
-| `WARMUP_TIMEOUT` | `180` | Seconds to connect before warmup cancels the match |
+| `WARMUP_TIMEOUT` | `180` | Seconds for all players to connect before warmup cancels the match |
+| `POLL_INTERVAL` | `2.0` | Seconds between matchmaker DB polls |
+
+**ELO / Ranking**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ELO_DEFAULT` | `1000` | Starting ELO for new players |
+| `ELO_K_FACTOR` | `32` | K-factor for established players |
+| `ELO_K_FACTOR_NEW` | `64` | K-factor during placement matches (higher volatility) |
+| `MIN_PLACEMENT_MATCHES` | `10` | Matches required before leaving placement |
+
+**Infrastructure**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUEUE_BACKEND` | `mysql` | Queue backend (`mysql`) |
+| `SERVER_BACKEND` | `docker` | Match server backend (`docker`) |
+| `RANKING_BACKEND` | `elo` | Ranking algorithm (`elo`) |
+| `NOTIFICATION_BACKEND` | `discord` | Notification backend (`discord` or `noop`) |
+| `DOCKER_IMAGE` | `csgo-match-server:latest` | Docker image used for match servers |
+| `LOBBY_SERVER_ID` | `lobby-1` | Identifier for this lobby instance — change when running multiple lobbies |
+
+**Admin & Web Panel**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `SUPER_ADMIN_STEAM_ID` | *(set by wizard)* | SteamID of the initial super-admin account |
-| `RCON_PASSWORD` | *(set by wizard)* | RCON password used by the web panel to broadcast to game servers |
-| `LOBBY_IP` | `127.0.0.1` | IP of the lobby server (used by web panel RCON broadcast) |
-| `LOBBY_PORT` | `27015` | Port of the lobby server |
-| `LOBBY_SERVER_ID` | `lobby-1` | Identifier tag for this lobby instance — change when running multiple lobbies |
+| `RCON_PASSWORD` | *(set by wizard)* | RCON password — used by web panel to broadcast to game servers |
+| `LOBBY_IP` | `127.0.0.1` | Lobby server IP for web panel RCON broadcast |
+| `LOBBY_PORT` | `27015` | Lobby server port |
+| `DISCORD_WEBHOOK_URL` | *(optional)* | Discord webhook for match notifications |
 
 After editing `config.env`, restart affected services:
 
@@ -261,7 +339,7 @@ sudo systemctl restart csgo-matchmaker csgo-webpanel
 
 - **Game Server**: CS:GO Dedicated Server (SteamCMD, app 740)
 - **Plugins**: SourceMod + MetaMod:Source + Levels Ranks + ServerRedirect
-- **Orchestration**: Python 3.10+ with python-valve, Docker SDK
+- **Orchestration**: Python 3.10+ with Docker SDK
 - **Database**: MySQL 8.0 / MariaDB
 - **Web**: Flask + Jinja2 + SQLAlchemy + Steam OpenID + python-valve (RCON)
 - **Containerization**: Docker (cm2network/csgo base image)
