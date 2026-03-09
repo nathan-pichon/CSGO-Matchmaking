@@ -26,7 +26,32 @@ setup_database() {
 
 # ── Private helpers ────────────────────────────────────────────────────────────
 
+_ensure_docker_daemon() {
+    # Fast path — daemon already up
+    docker info &>/dev/null && return 0
+
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+        info "Docker daemon not running — launching Docker Desktop..."
+        open -a Docker 2>/dev/null || true
+
+        local waited=0 timeout=90
+        while ! docker info &>/dev/null 2>&1; do
+            if (( waited >= timeout )); then
+                die "Docker Desktop did not start within ${timeout}s. Launch it manually then re-run."
+            fi
+            printf '\r  ⠋ Waiting for Docker daemon... (%ds / %ds)' "${waited}" "${timeout}" >/dev/tty
+            sleep 3
+            (( waited += 3 )) || true
+        done
+        printf '\r%50s\r' '' >/dev/tty   # clear the waiting line
+        ok "Docker Desktop is running"
+    else
+        die "Docker daemon is not running. Start it with: sudo systemctl start docker"
+    fi
+}
+
 _start_mysql_docker() {
+    _ensure_docker_daemon
     local container="${MYSQL_DOCKER_CONTAINER}"
 
     if docker inspect "${container}" &>/dev/null; then

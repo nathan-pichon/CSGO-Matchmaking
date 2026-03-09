@@ -344,11 +344,17 @@ _install_packages_brew() {
     fi
 
     if ! command -v docker &>/dev/null; then
-        warn "Docker not found. Install Docker Desktop: https://docs.docker.com/desktop/mac/"
-        confirm "Is Docker Desktop already installed and running?" \
-            || die "Docker Desktop is required. Install it and re-run."
+        warn "Docker Desktop not found."
+        warn "Install it from: https://docs.docker.com/desktop/mac/"
+        warn "The installer will attempt to start Docker automatically when it is needed."
+        warn "If it is not installed by the database setup step, the install will fail."
     else
-        ok "Docker found: $(docker --version 2>/dev/null | head -1)"
+        ok "Docker CLI found: $(docker --version 2>/dev/null | head -1)"
+        if docker info &>/dev/null 2>&1; then
+            ok "Docker daemon is running"
+        else
+            warn "Docker daemon is not running — it will be started automatically when needed."
+        fi
     fi
 
     info "SteamCMD skipped on macOS (dev mode)"
