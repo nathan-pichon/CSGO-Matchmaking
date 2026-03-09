@@ -43,6 +43,10 @@ readonly SR_VERSION="1.3.1"  # ServerRedirect    — https://github.com/GAMMACAS
 readonly LR_SHA256="a17155442448f5ff757a50677bb7035c7ab6badf542680293ef858669eaeaa7c"
 readonly SR_SHA256="8947e3028ae2762a580044ce5412c5d8201f005ff4702b65e5dd8065a5054839"
 
+# ── macOS dev: MySQL runs in Docker (no native server install) ─────────────────
+readonly MYSQL_DOCKER_CONTAINER="csgo-mysql"
+readonly MYSQL_DOCKER_IMAGE="mariadb:10.11"
+
 # ── Available maps ─────────────────────────────────────────────────────────────
 readonly ALL_MAPS=(
     "de_dust2"

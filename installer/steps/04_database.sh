@@ -26,10 +26,40 @@ setup_database() {
 
 # ── Private helpers ────────────────────────────────────────────────────────────
 
+_start_mysql_docker() {
+    local container="${MYSQL_DOCKER_CONTAINER}"
+
+    if docker inspect "${container}" &>/dev/null; then
+        if docker ps -q --filter "name=^/${container}$" | grep -q .; then
+            ok "MySQL container '${container}' already running"
+        else
+            info "Starting existing MySQL container '${container}'..."
+            docker start "${container}"
+            ok "MySQL container '${container}' started"
+        fi
+    else
+        info "Pulling ${MYSQL_DOCKER_IMAGE} and creating MySQL container '${container}'..."
+        docker run -d \
+            --name "${container}" \
+            --restart unless-stopped \
+            -e MYSQL_ROOT_PASSWORD="${DB_ROOT_PASS}" \
+            -p 127.0.0.1:"${DB_PORT}":3306 \
+            "${MYSQL_DOCKER_IMAGE}"
+        ok "MySQL container '${container}' started (root password set from config)"
+        INSTALLED_COMPONENTS+=("mysql-docker")
+        ROLLBACK_ACTIONS+=("docker stop ${container} 2>/dev/null; docker rm ${container} 2>/dev/null || true")
+    fi
+}
+
 _db_ensure_service_running() {
     if [[ "${OS_TYPE}" == "macos" ]]; then
-        brew services start mariadb 2>/dev/null || true
-        sleep 2
+        if [[ "${USE_EXISTING_MYSQL}" == "y" ]]; then
+            ok "Using existing MySQL (macOS)"
+            return 0
+        fi
+        _start_mysql_docker
+        # Force TCP connection to Docker container (not Unix socket)
+        DB_HOST="127.0.0.1"
         return 0
     fi
     command -v systemctl &>/dev/null || return 0
@@ -49,7 +79,13 @@ _db_ensure_service_running() {
 _db_wait_for_ready() {
     info "Waiting for MySQL to accept connections..."
     local retries=0
-    while ! mysqladmin ping -h"${DB_HOST}" -P"${DB_PORT}" --silent 2>/dev/null; do
+    while true; do
+        if [[ "${OS_TYPE}" == "macos" && "${USE_EXISTING_MYSQL}" == "n" ]]; then
+            # Use docker exec to check — avoids any local mysqladmin PATH issues
+            docker exec "${MYSQL_DOCKER_CONTAINER}" mariadb-admin ping --silent 2>/dev/null && break
+        else
+            mysqladmin ping -h"${DB_HOST}" -P"${DB_PORT}" --silent 2>/dev/null && break
+        fi
         (( ++retries > 30 )) && die "MySQL did not become ready within 30 seconds."
         sleep 1
     done
@@ -58,6 +94,11 @@ _db_wait_for_ready() {
 
 _db_secure_root() {
     [[ "${USE_EXISTING_MYSQL}" == "n" && -n "${DB_ROOT_PASS}" ]] || return 0
+    # On macOS the root password is set via MYSQL_ROOT_PASSWORD at container creation — no ALTER needed
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+        ok "MySQL root password pre-set (Docker env var)"
+        return 0
+    fi
     info "Securing MySQL root account..."
     mysql -h "${DB_HOST}" -P "${DB_PORT}" --user=root 2>/dev/null << MYSQL_SECURE || true
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASS}';

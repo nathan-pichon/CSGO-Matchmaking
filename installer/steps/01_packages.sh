@@ -280,9 +280,22 @@ _install_packages_brew() {
             || { info "Installing ${pkg}..."; brew install "${pkg}"; }
     done
 
-    brew list mariadb &>/dev/null \
-        && ok "MariaDB already installed" \
-        || { info "Installing MariaDB..."; brew install mariadb; ok "MariaDB installed"; }
+    # Install mysql-client CLI tools only — the MySQL server runs in Docker.
+    # mysql-client is keg-only (won't conflict with any server), so we must
+    # add it to PATH explicitly for the rest of this session.
+    if brew list mysql-client &>/dev/null; then
+        ok "mysql-client already installed"
+    else
+        info "Installing mysql-client (CLI tools — server runs in Docker)..."
+        brew install mysql-client
+        ok "mysql-client installed"
+    fi
+    local mc_prefix
+    mc_prefix="$(brew --prefix mysql-client 2>/dev/null || echo "")"
+    if [[ -n "${mc_prefix}" && -d "${mc_prefix}/bin" ]]; then
+        export PATH="${mc_prefix}/bin:${PATH}"
+        ok "mysql-client PATH configured: ${mc_prefix}/bin"
+    fi
 
     if ! command -v docker &>/dev/null; then
         warn "Docker not found. Install Docker Desktop: https://docs.docker.com/desktop/mac/"
@@ -293,6 +306,7 @@ _install_packages_brew() {
     fi
 
     info "SteamCMD skipped on macOS (dev mode)"
+    info "MySQL server will run as Docker container '${MYSQL_DOCKER_CONTAINER}' (set up in database step)"
 }
 
 # ── SteamCMD manual install (distro-agnostic fallback) ────────────────────────
