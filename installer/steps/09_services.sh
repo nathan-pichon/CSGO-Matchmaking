@@ -33,7 +33,11 @@ generate_systemd_services() {
     systemctl enable csgo-lobby csgo-matchmaker csgo-webpanel 2>/dev/null \
         || warn "Could not enable one or more services"
 
-    _configure_firewall
+    if [[ "${CONFIGURE_FIREWALL}" == "true" ]]; then
+        _configure_firewall
+    else
+        warn "Firewall auto-configuration skipped (user choice). Open ports manually if needed."
+    fi
 
     info "Starting services..."
     # Start matchmaker and web panel immediately; lobby requires CS:GO files

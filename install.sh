@@ -158,9 +158,16 @@ _print_dry_run_plan() {
         printf '       launchd plist for matchmaker (macOS dev)\n\n'
     fi
 
-    printf '  %s%d.%s Open firewall ports\n' "${BOLD}" "$(( step++ ))" "${RESET}"
-    printf '       Lobby: %s/udp+tcp  Web: %s/tcp  Match: %s-%s/udp+tcp\n\n' \
-        "${LOBBY_PORT}" "${WEB_PORT}" "${MATCH_PORT_START}" "${match_port_end}"
+    if [[ "${CONFIGURE_FIREWALL}" == "true" ]]; then
+        printf '  %s%d.%s Open firewall ports (ufw / firewalld / iptables)\n' "${BOLD}" "$(( step++ ))" "${RESET}"
+        printf '       Lobby: %s/udp+tcp  Web: %s/tcp  Match: %s-%s/udp+tcp\n\n' \
+            "${LOBBY_PORT}" "${WEB_PORT}" "${MATCH_PORT_START}" "${match_port_end}"
+    else
+        printf '  %s%d.%s Firewall: skipped%s\n' "${BOLD}" "$(( step++ ))" "${RESET}" \
+            "$( [[ "${OS_TYPE}" == "macos" ]] && echo " (macOS dev mode)" || echo " (manual — open ports yourself)" )"
+        printf '       Ports to open: %s/udp+tcp  %s/tcp  %s-%s/udp+tcp\n\n' \
+            "${LOBBY_PORT}" "${WEB_PORT}" "${MATCH_PORT_START}" "${match_port_end}"
+    fi
 
     printf '%s╚══════════════════════════════════════════════════════════════════════╝%s\n' "${CYAN}${BOLD}" "${RESET}"
     printf '\n  %sDry run complete. No system changes were made.%s\n' "${GREEN}${BOLD}" "${RESET}"

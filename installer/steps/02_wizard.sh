@@ -21,6 +21,7 @@ configure_wizard() {
     _wizard_step_webpanel
     _wizard_step_maps
     _wizard_step_matchmaking_settings
+    _wizard_step_firewall
     _wizard_print_summary
 }
 
@@ -432,6 +433,41 @@ _wizard_step_matchmaking_settings() {
     ok "Players per team: ${PLAYERS_PER_TEAM}  Max ELO: ${MAX_ELO_SPREAD}  Ready timeout: ${READY_CHECK_TIMEOUT}s"
 }
 
+_wizard_step_firewall() {
+    local match_port_end=$(( MATCH_PORT_START + MATCH_SLOTS - 1 ))
+
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+        # macOS uses pf, not ufw/iptables. Skip automatic config in dev mode.
+        CONFIGURE_FIREWALL=false
+        print_section "Firewall"
+        info "Firewall auto-configuration is skipped in macOS dev mode."
+        info "If you need to expose these ports, open them manually:"
+        printf '  %-12s %s\n' "UDP+TCP ${LOBBY_PORT}"                        "(CS:GO lobby server)"
+        printf '  %-12s %s\n' "TCP     ${WEB_PORT}"                           "(web panel)"
+        printf '  %-12s %s\n' "UDP+TCP ${MATCH_PORT_START}-${match_port_end}" "(match servers)"
+        return 0
+    fi
+
+    # Linux: let the user decide whether the installer should touch the firewall
+    print_section "Firewall"
+    info "The installer can configure OS firewall rules automatically (ufw / firewalld / iptables)."
+    info "Ports that would be opened:"
+    printf '  %-12s %s\n' "UDP+TCP ${LOBBY_PORT}"                        "(CS:GO lobby server)"
+    printf '  %-12s %s\n' "TCP     ${WEB_PORT}"                           "(web panel)"
+    printf '  %-12s %s\n' "UDP+TCP ${MATCH_PORT_START}-${match_port_end}" "(match servers)"
+    printf '\n'
+    info "Skip this if you manage your own firewall or use cloud security groups."
+    printf '\n'
+
+    if confirm "Configure firewall rules automatically?"; then
+        CONFIGURE_FIREWALL=true
+        ok "Firewall: will be configured automatically"
+    else
+        CONFIGURE_FIREWALL=false
+        warn "Firewall auto-configuration skipped — open the ports above manually before players connect."
+    fi
+}
+
 _wizard_print_summary() {
     local match_port_end=$(( MATCH_PORT_START + MATCH_SLOTS - 1 ))
     print_section "Configuration Summary"
@@ -451,6 +487,8 @@ _wizard_print_summary() {
     printf '  %-35s %s\n' "Ready Timeout:"      "${READY_CHECK_TIMEOUT}s"
     printf '  %-35s %s\n' "Discord Webhook:"    "${DISCORD_WEBHOOK_URL:-(disabled)}"
     printf '  %-35s %s\n' "Super Admin Steam ID:" "${SUPER_ADMIN_STEAM_ID:-(not set — set in config.env)}"
+    printf '  %-35s %s\n' "Firewall:" \
+        "$( [[ "${CONFIGURE_FIREWALL}" == "true" ]] && echo "auto-configure" || echo "skipped (manual)" )"
     printf '\n'
 
     # Detect cloud provider and show firewall reminder before user confirms

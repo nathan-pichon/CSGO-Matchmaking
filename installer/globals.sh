@@ -95,4 +95,5 @@ ADMIN_TOKEN=""
 SELECTED_MAPS=()
 USE_EXISTING_MYSQL="n"   # legacy; derived from DB_BACKEND on load
 DB_BACKEND="local"       # local | docker | external
+CONFIGURE_FIREWALL=true  # set to false by wizard to skip OS-level firewall rules
 SUPER_ADMIN_STEAM_ID=""
