@@ -8,7 +8,9 @@
 
 # ── Installer metadata ─────────────────────────────────────────────────────────
 readonly INSTALLER_VERSION="1.0.0"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# SCRIPT_DIR is set by install.sh before this file is sourced; only define it
+# here as a fallback when globals.sh is sourced directly (e.g., in tests).
+[[ -n "${SCRIPT_DIR+set}" ]] || readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ── File paths ─────────────────────────────────────────────────────────────────
 readonly LOG_FILE="${SCRIPT_DIR}/install.log"

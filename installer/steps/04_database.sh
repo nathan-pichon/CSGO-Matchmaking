@@ -19,7 +19,7 @@ setup_database() {
     _db_verify
 
     INSTALLED_COMPONENTS+=("database")
-    ROLLBACK_ACTIONS+=("mysql -h ${DB_HOST} -P ${DB_PORT} -u root -p${DB_ROOT_PASS} \
+    ROLLBACK_ACTIONS+=("mysql -h ${DB_HOST} -P ${DB_PORT} -u root -p\"${DB_ROOT_PASS}\" \
         -e \"DROP DATABASE IF EXISTS csgo_matchmaking; \
              DROP USER IF EXISTS 'csgo_mm'@'localhost';\" 2>/dev/null || true")
 }
@@ -95,13 +95,9 @@ _db_wait_for_ready() {
 }
 
 _db_secure_root() {
+    # Only needed for local installs — docker sets the root password via MYSQL_ROOT_PASSWORD
+    # at container creation, and external servers are pre-configured by the user.
     [[ "${DB_BACKEND}" == "local" && -n "${DB_ROOT_PASS}" ]] || return 0
-    # docker: root password is pre-set via MYSQL_ROOT_PASSWORD env var at container creation
-    # external: we trust the existing server config; caller supplies the root pass directly
-    if [[ "${DB_BACKEND}" != "local" ]]; then
-        ok "MySQL root password pre-set (${DB_BACKEND} mode)"
-        return 0
-    fi
     info "Securing MySQL root account..."
     mysql -h "${DB_HOST}" -P "${DB_PORT}" --user=root 2>/dev/null << MYSQL_SECURE || true
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASS}';
