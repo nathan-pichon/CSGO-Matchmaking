@@ -18,7 +18,7 @@ Since Valve shut down official CS:GO matchmaking servers, this project recreates
 - **Persistent statistics**: Kills, deaths, assists, headshots, win rate, ELO history
 - **Abandon penalties**: Progressive cooldowns (30 min → 7 days) for players who quit mid-match
 - **Web panel**: Leaderboard, player profiles, match history — login with Steam
-- **Admin panel**: Steam-authenticated admin interface (no shared passwords)
+- **Admin panel**: Full server management from the browser — queue monitor, live server controls, player search, ban/unban, map pool CRUD, activity audit log; no game client needed
 - **Seasonal rankings**: Periodic ELO resets with historical data preservation
 - **Discord notifications**: Match found, results, rank changes via webhooks
 - **Cloud-aware installer**: Auto-detects AWS, GCP, Azure, Hetzner, DigitalOcean, OVH and shows provider-specific firewall setup instructions
@@ -100,6 +100,26 @@ Leaderboard:  http://YOUR_SERVER_IP:5000
 ```
 
 On your first visit to the admin panel, sign in with the Steam account whose SteamID you provided during the wizard. That account is automatically seeded as the super-admin.
+
+### Admin Panel at a Glance
+
+Everything you need to run the server is available from the browser — no game client required.
+
+| Page | What you can do |
+|------|-----------------|
+| **Dashboard** | 8 live stat cards (matches, queue, bans, reports, players, ports, GSLT tokens) + nav tiles |
+| **Queue monitor** | See every queued player with wait time; kick anyone instantly |
+| **Servers** | RCON broadcast to the lobby or any live match; cancel a running match |
+| **Matches** | Full match history with status filter; force-cleanup stuck containers |
+| **Players** | Search by name/SteamID; tabs for banned/abandon/flagged; ban, unban, set ELO inline |
+| **Bans** | Issue bans with duration presets; history preserved on unban (soft-delete) |
+| **Reports** | Flagged players (≥ 3 reporters); drill-down to individual reports; quick-ban modal |
+| **Map pool** | Toggle maps active/inactive, adjust selection weight, add or remove maps |
+| **Activity log** | Full audit trail of every admin write action, filterable by admin and action type |
+| **Admin roster** | Add/remove admins, change roles (superadmin only) |
+| **Seasons** | Start a new season with soft ELO reset (superadmin only) |
+
+Player profiles (`/player/<steam_id>`) also show an **admin overlay panel** — ban status, abandon count, report count with drill-down, current queue status, and quick-action buttons — visible only to logged-in admins.
 
 ### Connect & Play
 
@@ -185,7 +205,7 @@ CSGO-Matchmaking/
 
 ### Admin Commands (Lobby Server)
 
-> Admins are managed via the web admin panel — no shared passwords.
+> Admins are managed via the web admin panel — no shared passwords. Most administrative tasks (ban, unban, ELO override, match cancel, server broadcast) are available directly from the web panel without ever opening the game.
 
 | Command | Description |
 |---------|-------------|
@@ -209,6 +229,10 @@ The installer generates `config.env` from your wizard answers. Key settings you 
 | `READY_CHECK_TIMEOUT` | `30` | Seconds to accept a ready check |
 | `WARMUP_TIMEOUT` | `180` | Seconds to connect before warmup cancels the match |
 | `SUPER_ADMIN_STEAM_ID` | *(set by wizard)* | SteamID of the initial super-admin account |
+| `RCON_PASSWORD` | *(set by wizard)* | RCON password used by the web panel to broadcast to game servers |
+| `LOBBY_IP` | `127.0.0.1` | IP of the lobby server (used by web panel RCON broadcast) |
+| `LOBBY_PORT` | `27015` | Port of the lobby server |
+| `LOBBY_SERVER_ID` | `lobby-1` | Identifier tag for this lobby instance — change when running multiple lobbies |
 
 After editing `config.env`, restart affected services:
 
@@ -234,7 +258,7 @@ sudo systemctl restart csgo-matchmaker csgo-webpanel
 - **Plugins**: SourceMod + MetaMod:Source + Levels Ranks + ServerRedirect
 - **Orchestration**: Python 3.10+ with python-valve, Docker SDK
 - **Database**: MySQL 8.0 / MariaDB
-- **Web**: Flask + Jinja2 + SQLAlchemy + Steam OpenID
+- **Web**: Flask + Jinja2 + SQLAlchemy + Steam OpenID + python-valve (RCON)
 - **Containerization**: Docker (cm2network/csgo base image)
 
 ## License
