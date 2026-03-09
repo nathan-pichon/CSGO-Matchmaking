@@ -20,16 +20,57 @@
 
 # ── Self-re-exec with bash 4+ on macOS ────────────────────────────────────────
 # macOS ships bash 3.2 (GPL-2 licence). This installer requires bash 4+.
-# If Homebrew has installed a newer bash, transparently re-exec with it so
-# the user doesn't have to remember to invoke the script explicitly with bash4.
-# This block uses only bash 3.2-compatible syntax intentionally.
+# On macOS: look for a Homebrew bash 4+, install it automatically if missing,
+# then transparently re-exec so the user never has to think about it.
+# This entire block intentionally uses only bash 3.2-compatible syntax.
 if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-    for _bash4 in /opt/homebrew/bin/bash /usr/local/bin/bash; do
-        if [ -x "${_bash4}" ] && "${_bash4}" -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]' 2>/dev/null; then
-            exec "${_bash4}" "$0" "$@"
+    if [ "$(uname -s)" = "Darwin" ]; then
+
+        # 1 — Re-exec immediately if bash 4+ is already installed
+        for _bash4 in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+            if [ -x "${_bash4}" ] && \
+               "${_bash4}" -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]' 2>/dev/null; then
+                exec "${_bash4}" "$0" "$@"
+            fi
+        done
+
+        # 2 — bash 4 not present; auto-install via Homebrew
+        printf '\n  \033[33m⚠\033[0m  macOS ships bash 3.2 — this installer requires bash 4+.\n'
+        if command -v brew >/dev/null 2>&1; then
+            printf '  Installing bash via Homebrew (one-time, ~30 s)...\n\n'
+            # brew must not run as root; use the invoking user when under sudo
+            if [ "${EUID:-$(id -u)}" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
+                sudo -u "${SUDO_USER}" brew install bash
+            elif [ "${EUID:-$(id -u)}" -ne 0 ]; then
+                brew install bash
+            else
+                printf '  \033[31m✗\033[0m  Cannot run Homebrew as root (no SUDO_USER set).\n'
+                printf '       Run: brew install bash && sudo ./install.sh\n\n'
+                exit 1
+            fi
+
+            # 3 — Re-exec after successful install
+            for _bash4 in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+                if [ -x "${_bash4}" ] && \
+                   "${_bash4}" -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]' 2>/dev/null; then
+                    printf '\n  \033[32m✓\033[0m  Relaunching with %s...\n\n' "${_bash4}"
+                    exec "${_bash4}" "$0" "$@"
+                fi
+            done
+
+            printf '  \033[31m✗\033[0m  brew install completed but bash 4 still not found.\n'
+            printf '       Try:  brew install bash && sudo ./install.sh\n\n'
+        else
+            # Homebrew not installed
+            printf '  \033[31m✗\033[0m  Homebrew is not installed. Install it first:\n\n'
+            printf '       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n'
+            printf '       brew install bash\n\n'
+            printf '  Then re-run:  sudo ./install.sh\n\n'
         fi
-    done
-    # No bash 4 found — fall through and let check_prerequisites report the error.
+        exit 1
+
+    fi
+    # Non-macOS with bash < 4: fall through; check_prerequisites will die cleanly.
 fi
 
 set -euo pipefail

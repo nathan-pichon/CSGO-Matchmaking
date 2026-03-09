@@ -115,9 +115,15 @@ _sigint_handler() {
 check_prerequisites() {
     print_section "Prerequisite Checks"
 
-    # Bash 4+ required for associative arrays and [[ features used throughout
+    # Bash 4+ required for associative arrays and [[ features used throughout.
+    # On macOS this is normally handled by the auto-install block at the top of
+    # install.sh — reaching here means something went wrong; show clear guidance.
     if (( BASH_VERSINFO[0] < 4 )); then
-        die "Bash 4.0+ required. Current: ${BASH_VERSION}. macOS users: brew install bash"
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            die "Bash 4.0+ required (current: ${BASH_VERSION}). Run: brew install bash"
+        else
+            die "Bash 4.0+ required (current: ${BASH_VERSION}). Install a modern bash via your package manager."
+        fi
     fi
     ok "Bash ${BASH_VERSION}"
 
