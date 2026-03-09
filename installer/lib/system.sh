@@ -241,8 +241,8 @@ check_requirements() {
         ram_mb=$(( $(sysctl -n hw.memsize) / 1024 / 1024 ))
     fi
 
-    if   (( ram_mb < MIN_RAM_MB ));  then error "RAM: ${ram_mb}MB — minimum ${MIN_RAM_MB}MB required."; (( failed++ ))
-    elif (( ram_mb < WARN_RAM_MB )); then warn  "RAM: ${ram_mb}MB — ${WARN_RAM_MB}MB recommended."    ; (( borderline++ ))
+    if   (( ram_mb < MIN_RAM_MB ));  then error "RAM: ${ram_mb}MB — minimum ${MIN_RAM_MB}MB required."; (( ++failed ))
+    elif (( ram_mb < WARN_RAM_MB )); then warn  "RAM: ${ram_mb}MB — ${WARN_RAM_MB}MB recommended."    ; (( ++borderline ))
     else                                  ok    "RAM: ${ram_mb}MB"
     fi
 
@@ -256,7 +256,7 @@ check_requirements() {
 
     if (( cpu_cores < MIN_CPU_CORES )); then
         error "CPU Cores: ${cpu_cores} — minimum ${MIN_CPU_CORES} required."
-        (( failed++ ))
+        (( ++failed ))
     else
         ok "CPU Cores: ${cpu_cores}"
     fi
@@ -271,10 +271,10 @@ check_requirements() {
 
     if (( disk_gb < MIN_DISK_GB / 2 )); then
         error "Disk: ${disk_gb}GB free — minimum ${MIN_DISK_GB}GB required."
-        (( failed++ ))
+        (( ++failed ))
     elif (( disk_gb < MIN_DISK_GB )); then
         warn "Disk: ${disk_gb}GB free — ${MIN_DISK_GB}GB recommended."
-        (( borderline++ ))
+        (( ++borderline ))
     else
         ok "Disk: ${disk_gb}GB free"
     fi
@@ -282,7 +282,7 @@ check_requirements() {
     # macOS dev warning
     if [[ "${OS_TYPE}" == "macos" ]]; then
         warn "macOS is only supported for development. Do not use in production."
-        (( borderline++ ))
+        (( ++borderline ))
     fi
 
     # Port conflicts
@@ -294,7 +294,7 @@ check_requirements() {
 
     if [[ ${#port_conflicts[@]} -gt 0 ]]; then
         warn "Ports already in use: ${port_conflicts[*]} — you will be asked to choose alternatives."
-        (( borderline++ ))
+        (( ++borderline ))
     else
         ok "Required ports (${REQUIRED_PORTS[*]}) are all available"
     fi
