@@ -9,30 +9,33 @@
 
 # prompt <message> [default]
 # Print a styled prompt and return the user's input (or the default).
+# Label is written to /dev/tty so this is safe inside $(...) substitution.
 prompt() {
     local message="$1"
     local default="${2:-}"
     local response
 
     if [[ -n "${default}" ]]; then
-        printf '  %s%s%s [%s%s%s]: ' "${BOLD}" "${message}" "${RESET}" "${DIM}" "${default}" "${RESET}"
+        printf '  %s%s%s [%s%s%s]: ' \
+            "${BOLD}" "${message}" "${RESET}" "${DIM}" "${default}" "${RESET}" >/dev/tty
     else
-        printf '  %s%s%s: ' "${BOLD}" "${message}" "${RESET}"
+        printf '  %s%s%s: ' "${BOLD}" "${message}" "${RESET}" >/dev/tty
     fi
 
-    read -r response
+    read -r response </dev/tty
     printf '%s\n' "${response:-${default}}"
 }
 
 # prompt_secret <message>
 # Like prompt but hides the input (no echo).
+# Label is written to /dev/tty so this is safe inside $(...) substitution.
 prompt_secret() {
     local message="$1"
     local response
 
-    printf '  %s%s%s: ' "${BOLD}" "${message}" "${RESET}"
-    read -rs response
-    printf '\n'
+    printf '  %s%s%s: ' "${BOLD}" "${message}" "${RESET}" >/dev/tty
+    read -rs response </dev/tty
+    printf '\n' >/dev/tty
     printf '%s\n' "${response}"
 }
 
@@ -46,34 +49,46 @@ confirm() {
 
     if [[ "${default,,}" == "y" ]]; then prompt_str="[Y/n]"; else prompt_str="[y/N]"; fi
 
-    printf '  %s%s%s %s ' "${BOLD}" "${message}" "${RESET}" "${prompt_str}"
-    read -r response
+    printf '  %s%s%s %s ' "${BOLD}" "${message}" "${RESET}" "${prompt_str}" >/dev/tty
+    read -r response </dev/tty
     response="${response:-${default}}"
     [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]
 }
 
 # choose <prompt> <label1> <label2> ...
 # Display a numbered menu and return the 1-based index of the chosen option.
+# All display output goes to /dev/tty so this function is safe to call inside
+# $(...) command substitution without swallowing the menu or the prompt.
 choose() {
     local prompt_msg="$1"; shift
     local -a options=("$@")
-    local i choice
+    local i _choice
 
-    for (( i=0; i < ${#options[@]}; i++ )); do
-        printf '  %s%d)%s %s\n' "${BOLD}" "$(( i + 1 ))" "${RESET}" "${options[$i]}"
-    done
-    printf '\n'
+    # Write the menu directly to the terminal, bypassing any $(...) capture
+    {
+        printf '\n'
+        for (( i=0; i < ${#options[@]}; i++ )); do
+            printf '  %s%d)%s %s\n' "${BOLD}" "$(( i + 1 ))" "${RESET}" "${options[$i]}"
+        done
+        printf '\n'
+    } >/dev/tty
 
     while true; do
-        choice="$(prompt "${prompt_msg}" "1")"
-        if [[ "${choice}" =~ ^[0-9]+$ ]] && \
-           (( choice >= 1 && choice <= ${#options[@]} )); then
+        # Prompt and read directly from/to the terminal
+        printf '  %s%s%s [%s1%s]: ' \
+            "${BOLD}" "${prompt_msg}" "${RESET}" "${DIM}" "${RESET}" >/dev/tty
+        read -r _choice </dev/tty
+        _choice="${_choice:-1}"
+        if [[ "${_choice}" =~ ^[0-9]+$ ]] && \
+           (( _choice >= 1 && _choice <= ${#options[@]} )); then
             break
         fi
-        error "Please enter a number between 1 and ${#options[@]}"
+        printf '  \033[31m✗\033[0m  Please enter a number between 1 and %d\n' \
+            "${#options[@]}" >/dev/tty
     done
 
-    printf '%d\n' "${choice}"
+    # Only the numeric result goes to stdout (captured by the caller's $(...))
+    printf '%d\n' "${_choice}"
 }
 
 # ── Validators ─────────────────────────────────────────────────────────────────
