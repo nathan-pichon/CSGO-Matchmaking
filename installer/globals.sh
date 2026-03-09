@@ -69,6 +69,7 @@ VERSION_ID=""
 INSTALLED_COMPONENTS=()
 ROLLBACK_ACTIONS=()
 MODE="install"
+DRY_RUN=false
 
 # ── Configuration values (set by the wizard) ──────────────────────────────────
 SERVER_IP=""
@@ -90,5 +91,6 @@ DISCORD_WEBHOOK_URL=""
 FLASK_SECRET_KEY=""
 ADMIN_TOKEN=""
 SELECTED_MAPS=()
-USE_EXISTING_MYSQL="n"
+USE_EXISTING_MYSQL="n"   # legacy; derived from DB_BACKEND on load
+DB_BACKEND="local"       # local | docker | external
 SUPER_ADMIN_STEAM_ID=""

@@ -66,6 +66,16 @@ _apt_install_core_pkgs() {
 }
 
 _apt_install_mysql() {
+    if [[ "${DB_BACKEND}" != "local" ]]; then
+        # docker or external — only need the CLI client, not the server
+        command -v mysql &>/dev/null && { ok "mysql CLI already available"; return; }
+        info "Installing mysql-client (CLI only — DB server is ${DB_BACKEND})..."
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq default-mysql-client 2>/dev/null \
+            || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq mysql-client 2>/dev/null \
+            || true
+        ok "mysql-client installed"
+        return
+    fi
     if is_installed "mysql-server" || is_installed "mariadb-server"; then
         ok "MySQL/MariaDB already installed"; return
     fi
@@ -142,14 +152,22 @@ _install_packages_yum() {
         || yum install -y -q python3-virtualenv \
         || pip3 install virtualenv
 
-    if ! command -v mysql &>/dev/null; then
-        info "Installing MariaDB..."
-        yum install -y -q mariadb-server mariadb
-        ok "MariaDB installed"
-        INSTALLED_COMPONENTS+=("mariadb-server")
-        ROLLBACK_ACTIONS+=("yum remove -y mariadb-server 2>/dev/null || true")
+    if [[ "${DB_BACKEND}" == "local" ]]; then
+        if ! command -v mysql &>/dev/null; then
+            info "Installing MariaDB server..."
+            yum install -y -q mariadb-server mariadb
+            ok "MariaDB installed"
+            INSTALLED_COMPONENTS+=("mariadb-server")
+            ROLLBACK_ACTIONS+=("yum remove -y mariadb-server 2>/dev/null || true")
+        else
+            ok "MySQL/MariaDB already installed"
+        fi
     else
-        ok "MySQL/MariaDB already installed"
+        command -v mysql &>/dev/null || {
+            info "Installing mariadb (client only — DB server is ${DB_BACKEND})..."
+            yum install -y -q mariadb 2>/dev/null || true
+            ok "mariadb client installed"
+        }
     fi
 
     if ! command -v docker &>/dev/null; then
@@ -187,14 +205,22 @@ _install_packages_dnf() {
         || dnf install -y -q python3-virtualenv 2>/dev/null \
         || pip3 install virtualenv
 
-    if ! command -v mysql &>/dev/null && ! command -v mariadb &>/dev/null; then
-        info "Installing MariaDB..."
-        dnf install -y -q mariadb-server
-        ok "MariaDB installed"
-        INSTALLED_COMPONENTS+=("mariadb-server")
-        ROLLBACK_ACTIONS+=("dnf remove -y mariadb-server 2>/dev/null || true")
+    if [[ "${DB_BACKEND}" == "local" ]]; then
+        if ! command -v mysql &>/dev/null && ! command -v mariadb &>/dev/null; then
+            info "Installing MariaDB server..."
+            dnf install -y -q mariadb-server
+            ok "MariaDB installed"
+            INSTALLED_COMPONENTS+=("mariadb-server")
+            ROLLBACK_ACTIONS+=("dnf remove -y mariadb-server 2>/dev/null || true")
+        else
+            ok "MySQL/MariaDB already installed"
+        fi
     else
-        ok "MySQL/MariaDB already installed"
+        command -v mysql &>/dev/null || command -v mariadb &>/dev/null || {
+            info "Installing mariadb (client only — DB server is ${DB_BACKEND})..."
+            dnf install -y -q mariadb 2>/dev/null || true
+            ok "mariadb client installed"
+        }
     fi
 
     if ! command -v docker &>/dev/null; then
@@ -231,15 +257,23 @@ _install_packages_pacman() {
             || pacman -S --noconfirm --needed "${pkg}"
     done
 
-    if ! is_installed "mariadb"; then
-        info "Installing MariaDB..."
-        pacman -S --noconfirm --needed mariadb
-        mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
-        ok "MariaDB installed"
-        INSTALLED_COMPONENTS+=("mariadb")
-        ROLLBACK_ACTIONS+=("pacman -R --noconfirm mariadb 2>/dev/null || true")
+    if [[ "${DB_BACKEND}" == "local" ]]; then
+        if ! is_installed "mariadb"; then
+            info "Installing MariaDB server..."
+            pacman -S --noconfirm --needed mariadb
+            mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
+            ok "MariaDB installed"
+            INSTALLED_COMPONENTS+=("mariadb")
+            ROLLBACK_ACTIONS+=("pacman -R --noconfirm mariadb 2>/dev/null || true")
+        else
+            ok "MariaDB already installed"
+        fi
     else
-        ok "MariaDB already installed"
+        command -v mysql &>/dev/null || command -v mariadb &>/dev/null || {
+            info "Installing mariadb-clients (CLI only — DB server is ${DB_BACKEND})..."
+            pacman -S --noconfirm --needed mariadb-clients 2>/dev/null || true
+            ok "mariadb-clients installed"
+        }
     fi
 
     if ! is_installed "docker"; then
@@ -306,7 +340,10 @@ _install_packages_brew() {
     fi
 
     info "SteamCMD skipped on macOS (dev mode)"
-    info "MySQL server will run as Docker container '${MYSQL_DOCKER_CONTAINER}' (set up in database step)"
+    case "${DB_BACKEND}" in
+        docker)   info "MySQL server will run as Docker container '${MYSQL_DOCKER_CONTAINER}' (set up in database step)" ;;
+        external) info "MySQL server is external — only CLI client tools are needed" ;;
+    esac
 }
 
 # ── SteamCMD manual install (distro-agnostic fallback) ────────────────────────

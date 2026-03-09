@@ -13,7 +13,7 @@ configure_wizard() {
 
     _wizard_load_existing_config
     _wizard_step_server_ip
-    _wizard_step_database
+    _wizard_step_database   # collects host/port/pass — mode already set by ask_db_backend
     _wizard_step_rcon
     _wizard_step_match_gslts
     _wizard_step_lobby_gslt
@@ -44,6 +44,14 @@ _wizard_load_existing_config() {
     MAX_ELO_SPREAD="${MAX_ELO_SPREAD:-200}"
     READY_CHECK_TIMEOUT="${READY_CHECK_TIMEOUT:-30}"
     SUPER_ADMIN_STEAM_ID="${SUPER_ADMIN_STEAM_ID:-}"
+
+    # Derive DB_BACKEND from legacy USE_EXISTING_MYSQL if not already in config
+    if [[ -z "${DB_BACKEND:-}" ]]; then
+        case "${USE_EXISTING_MYSQL:-n}" in
+            y) DB_BACKEND="external" ;;
+            *) DB_BACKEND="local"    ;;
+        esac
+    fi
     ok "Existing configuration loaded"
 }
 
@@ -67,22 +75,41 @@ _wizard_step_server_ip() {
 
 _wizard_step_database() {
     print_step "2" "MySQL / Database Setup"
-    if confirm "Use an existing MySQL instance (remote or pre-configured)?"; then
-        USE_EXISTING_MYSQL="y"
-        DB_HOST="$(prompt "MySQL host" "${DB_HOST:-localhost}")"
-        while true; do
-            DB_PORT="$(prompt "MySQL port" "${DB_PORT:-3306}")"
-            validate_port "${DB_PORT}" && break || error "Invalid port number."
-        done
-        DB_ROOT_PASS="$(prompt_secret "MySQL root password (for creating DB/user)")"
-    else
-        USE_EXISTING_MYSQL="n"
-        [[ -z "${DB_ROOT_PASS:-}" ]] \
-            && DB_ROOT_PASS="$(generate_password 20)" \
-            && info "Generated MySQL root password"
-        DB_HOST="localhost"
-        DB_PORT="3306"
-    fi
+    info "Database mode: ${BOLD}${DB_BACKEND}${RESET}"
+    printf '\n'
+
+    case "${DB_BACKEND}" in
+        local)
+            # Server will be installed on this machine — use localhost
+            DB_HOST="localhost"
+            DB_PORT="3306"
+            if [[ -z "${DB_ROOT_PASS:-}" ]]; then
+                DB_ROOT_PASS="$(generate_password 20)"
+                info "Generated MySQL root password"
+            fi
+            USE_EXISTING_MYSQL="n"
+            ;;
+        docker)
+            # Server will run in a Docker container — force TCP to 127.0.0.1
+            DB_HOST="127.0.0.1"
+            DB_PORT="${DB_PORT:-3306}"
+            if [[ -z "${DB_ROOT_PASS:-}" ]]; then
+                DB_ROOT_PASS="$(generate_password 20)"
+                info "Generated MySQL root password (used for Docker container)"
+            fi
+            USE_EXISTING_MYSQL="n"
+            ;;
+        external)
+            # Connect to a pre-existing MySQL server
+            DB_HOST="$(prompt "MySQL host" "${DB_HOST:-localhost}")"
+            while true; do
+                DB_PORT="$(prompt "MySQL port" "${DB_PORT:-3306}")"
+                validate_port "${DB_PORT}" && break || error "Invalid port number."
+            done
+            DB_ROOT_PASS="$(prompt_secret "MySQL root password (for creating DB/user)")"
+            USE_EXISTING_MYSQL="y"
+            ;;
+    esac
 
     if [[ -z "${DB_PASS:-}" ]]; then
         DB_PASS="$(generate_password 24)"
@@ -92,7 +119,47 @@ _wizard_step_database() {
         custom_db_pass="$(prompt "Database password for csgo_mm (leave empty to keep current)" "${DB_PASS}")"
         [[ -n "${custom_db_pass}" ]] && DB_PASS="${custom_db_pass}"
     fi
-    ok "Database: csgo_matchmaking  User: csgo_mm @ ${DB_HOST}:${DB_PORT}"
+    ok "Database: csgo_matchmaking  User: csgo_mm @ ${DB_HOST}:${DB_PORT}  [${DB_BACKEND}]"
+}
+
+# ── DB backend selection (called before package install) ───────────────────────
+
+# ask_db_backend
+# Presents a numbered menu to select the database setup mode.
+# Must be called BEFORE install_packages so the right packages are installed.
+ask_db_backend() {
+    print_section "Database Setup Mode"
+
+    if [[ "${MODE}" == "update" && -n "${DB_BACKEND:-}" ]]; then
+        info "Keeping existing database mode: ${BOLD}${DB_BACKEND}${RESET}"
+        return 0
+    fi
+
+    if [[ "${OS_TYPE}" == "macos" ]]; then
+        info "On macOS, native MySQL server install is not offered (keeps your system clean)."
+        printf '\n'
+        local choice
+        choice="$(choose "Select database mode" \
+            "docker   — MySQL in a Docker container ${BOLD}(recommended)${RESET}" \
+            "external — existing MySQL server (remote or already installed)")"
+        case "${choice}" in
+            1) DB_BACKEND="docker"   ;;
+            2) DB_BACKEND="external" ;;
+        esac
+    else
+        local choice
+        choice="$(choose "Select database mode" \
+            "local    — install MySQL/MariaDB on this machine" \
+            "docker   — run MySQL in a Docker container" \
+            "external — use an existing MySQL server (remote or pre-configured)")"
+        case "${choice}" in
+            1) DB_BACKEND="local"    ;;
+            2) DB_BACKEND="docker"   ;;
+            3) DB_BACKEND="external" ;;
+        esac
+    fi
+
+    ok "Database mode: ${DB_BACKEND}"
 }
 
 _wizard_step_rcon() {

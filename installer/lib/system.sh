@@ -130,10 +130,12 @@ check_prerequisites() {
     # Parse CLI flags
     for arg in "$@"; do
         case "${arg}" in
-            --update) MODE="update" ;;
-            --check)  MODE="check"  ;;
+            --update)   MODE="update"  ;;
+            --check)    MODE="check"   ;;
+            --dry-run)  DRY_RUN=true   ;;
         esac
     done
+    [[ "${DRY_RUN}" == "true" ]] && warn "DRY RUN mode — wizard will run but no system changes will be made."
 
     # Internet connectivity
     info "Checking internet connectivity..."

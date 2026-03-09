@@ -501,10 +501,15 @@ print_summary() {
             printf '    Then start the lobby: sudo systemctl start csgo-lobby\n\n'
         fi
     else
-        printf '  %sMySQL (Docker container):%s\n' "${BOLD}" "${RESET}"
-        printf '    docker start %s    # start\n'  "${MYSQL_DOCKER_CONTAINER}"
-        printf '    docker stop  %s    # stop\n'   "${MYSQL_DOCKER_CONTAINER}"
-        printf '    docker logs  %s    # view logs\n\n' "${MYSQL_DOCKER_CONTAINER}"
+        if [[ "${DB_BACKEND}" == "docker" ]]; then
+            printf '  %sMySQL (Docker container):%s\n' "${BOLD}" "${RESET}"
+            printf '    docker start %s    # start\n'  "${MYSQL_DOCKER_CONTAINER}"
+            printf '    docker stop  %s    # stop\n'   "${MYSQL_DOCKER_CONTAINER}"
+            printf '    docker logs  %s    # view logs\n\n' "${MYSQL_DOCKER_CONTAINER}"
+        else
+            printf '  %sMySQL:%s external server at %s:%s\n\n' \
+                "${BOLD}" "${RESET}" "${DB_HOST}" "${DB_PORT}"
+        fi
         printf '  %sStart matchmaker (macOS dev):%s\n' "${BOLD}" "${RESET}"
         printf '    source %s && %s/bin/python matchmaker/matchmaker.py\n\n' \
             "${CONFIG_FILE}" "${MATCHMAKER_VENV}"

@@ -52,6 +52,30 @@ confirm() {
     [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]
 }
 
+# choose <prompt> <label1> <label2> ...
+# Display a numbered menu and return the 1-based index of the chosen option.
+choose() {
+    local prompt_msg="$1"; shift
+    local -a options=("$@")
+    local i choice
+
+    for (( i=0; i < ${#options[@]}; i++ )); do
+        printf '  %s%d)%s %s\n' "${BOLD}" "$(( i + 1 ))" "${RESET}" "${options[$i]}"
+    done
+    printf '\n'
+
+    while true; do
+        choice="$(prompt "${prompt_msg}" "1")"
+        if [[ "${choice}" =~ ^[0-9]+$ ]] && \
+           (( choice >= 1 && choice <= ${#options[@]} )); then
+            break
+        fi
+        error "Please enter a number between 1 and ${#options[@]}"
+    done
+
+    printf '%d\n' "${choice}"
+}
+
 # ── Validators ─────────────────────────────────────────────────────────────────
 
 # validate_ip <value>  — accepts IPv4 addresses and hostnames

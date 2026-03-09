@@ -42,6 +42,8 @@ _write_config_file() {
 # WARNING: This file contains secrets. Do not commit to version control.
 
 # --- Database ---
+# How MySQL is hosted: local (installed on this machine) | docker | external
+DB_BACKEND=${DB_BACKEND}
 # Host of the MySQL/MariaDB server
 DB_HOST=${DB_HOST}
 # MySQL port (default 3306)
